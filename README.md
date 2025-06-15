@@ -28,6 +28,7 @@ This project implements a local-only memory system inspired by supermemory.ai, p
 - **[Video Pipeline](VIDEO_INGESTION_PIPELINE.md)**: Complete video processing workflow
 - **[MCP Integration](MCP_SERVER_INTEGRATION.md)**: Model Context Protocol server design
 - **[System Architecture](LOCAL_SUPERMEMORY_ARCHITECTURE.md)**: Complete technical architecture
+- **[GUI Video Interface](GUI_VIDEO_INTERFACE.md)**: Web-based video management and playback interface
 
 ## Getting Started
 
@@ -44,12 +45,25 @@ This project implements a local-only memory system inspired by supermemory.ai, p
 
 ## Roadmap
 
+### v1.0 - Core Implementation
 - [ ] Core memory engine implementation
 - [ ] Video processing pipeline
 - [ ] MCP server with tool definitions
-- [ ] Web interface for management
 - [ ] CLI tools for batch operations
+
+### v2.0 - GUI Enhancement  
+- [ ] **Web-based Video Interface** - Complete GUI with video playback and transcript sync
+- [ ] Visual content discovery and management
+- [ ] Enhanced search with visual results
+- [ ] Real-time processing status monitoring
+
+### v3.0 - Advanced Features
 - [ ] Plugin architecture for extensibility
+- [ ] Analytics dashboard and insights
+- [ ] Collaboration features
+- [ ] Mobile/responsive optimizations
+
+See **[GUI_VIDEO_INTERFACE.md](GUI_VIDEO_INTERFACE.md)** for detailed GUI enhancement specifications.
 
 ## License
 
