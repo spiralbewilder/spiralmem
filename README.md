@@ -29,6 +29,7 @@ This project implements a local-only memory system inspired by supermemory.ai, p
 - **[MCP Integration](MCP_SERVER_INTEGRATION.md)**: Model Context Protocol server design
 - **[System Architecture](LOCAL_SUPERMEMORY_ARCHITECTURE.md)**: Complete technical architecture
 - **[GUI Video Interface](GUI_VIDEO_INTERFACE.md)**: Web-based video management and playback interface
+- **[Implementation Roadmap](IMPLEMENTATION_ROADMAP.md)**: 12-week build plan with detailed phases
 
 ## Getting Started
 
