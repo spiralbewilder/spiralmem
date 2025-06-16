@@ -46,24 +46,26 @@ This project implements a local-only memory system inspired by supermemory.ai, p
 
 ## Roadmap
 
-### v1.0 - Core Implementation
-- [ ] Core memory engine implementation
-- [ ] Video processing pipeline
-- [ ] MCP server with tool definitions
-- [ ] CLI tools for batch operations
+### v1.0 - Hybrid Memory System ⭐ **ENHANCED**
+- [x] ✅ **Week 1**: Core memory engine foundation  
+- [ ] 🚀 **Week 2**: **Hybrid video architecture** - Local + Platform integration
+- [ ] **Week 3**: Video processing pipeline with local transcription
+- [ ] **Week 4**: MCP server with hybrid search tools
+- [ ] **Week 5**: CLI tools for batch operations
 
 ### v2.0 - GUI Enhancement  
-- [ ] **Web-based Video Interface** - Complete GUI with video playback and transcript sync
-- [ ] Visual content discovery and management
-- [ ] Enhanced search with visual results
+- [ ] **Web-based Video Interface** - Unified playback for local + platform videos
+- [ ] Cross-platform content discovery and management
+- [ ] Hybrid search with visual results and deep-links
 - [ ] Real-time processing status monitoring
 
 ### v3.0 - Advanced Features
-- [ ] Plugin architecture for extensibility
-- [ ] Analytics dashboard and insights
-- [ ] Collaboration features
+- [ ] Multi-platform connectors (Spotify, Zoom, Teams)
+- [ ] AI-powered content correlation and recommendations
+- [ ] Collaboration features and shared libraries
 - [ ] Mobile/responsive optimizations
 
+See **[WEEK2_ENHANCED_TASKS.md](WEEK2_ENHANCED_TASKS.md)** for the revolutionary hybrid video architecture plan.  
 See **[GUI_VIDEO_INTERFACE.md](GUI_VIDEO_INTERFACE.md)** for detailed GUI enhancement specifications.
 
 ## License
