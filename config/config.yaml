@@ -1,0 +1,47 @@
+database:
+  path: "./data/spiralmem.db"
+  vectorStore: "sqlite-vss"
+  backup:
+    enabled: true
+    interval: "24h"
+    retention: "30d"
+
+video:
+  processing:
+    maxConcurrent: 2
+    maxFileSize: "2GB"
+    tempDir: "./data/temp"
+  whisper:
+    model: "base"
+    device: "cpu"
+    language: "auto"
+  frames:
+    extractionInterval: 30
+    format: "jpg"
+    quality: 85
+
+embeddings:
+  model: "all-MiniLM-L6-v2"
+  dimensions: 384
+  device: "cpu"
+  batchSize: 32
+
+server:
+  mcp:
+    enabled: true
+    name: "spiralmem-local"
+  api:
+    enabled: false
+    port: 3000
+    host: "localhost"
+
+storage:
+  maxMemoryMB: 1024
+  cacheSize: 100
+  tempRetention: "7d"
+
+logging:
+  level: "info"
+  file: "./logs/spiralmem.log"
+  maxFiles: 10
+  maxSize: "10MB"
