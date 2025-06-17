@@ -6,7 +6,7 @@ set -e  # Exit on any error
 
 # Configuration
 SPIRALMEM_VERSION="${SPIRALMEM_VERSION:-1.0.0}"
-SPIRALMEM_REPO="${SPIRALMEM_REPO:-https://github.com/spiralbewilder/spiralmem-local}"
+SPIRALMEM_REPO="${SPIRALMEM_REPO:-https://github.com/spiralbewilder/spiralmem}"
 INSTALL_DIR="${SPIRALMEM_INSTALL_DIR:-$HOME/.spiralmem}"
 BIN_DIR="${SPIRALMEM_BIN_DIR:-$HOME/.local/bin}"
 CONFIG_DIR="${SPIRALMEM_CONFIG_DIR:-$HOME/.config/spiralmem}"

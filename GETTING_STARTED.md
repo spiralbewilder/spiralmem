@@ -5,8 +5,15 @@ Welcome to Spiralmem! This guide will walk you through your first steps with the
 ## Installation
 
 ### One-Command Install (Recommended)
+
+**Unix/Linux/macOS:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1 | iex
 ```
 
 The installer will:

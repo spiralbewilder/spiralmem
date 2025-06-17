@@ -5,27 +5,30 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)]()
 
-> **🚀 INSTALL NOW**: `curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh`
+> **🚀 INSTALL NOW**: 
+> - **Unix/Linux/macOS**: `curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh`
+> - **Windows**: `iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1 | iex`
 
 A privacy-first, local video memory system that transforms video files into searchable, organized memories using AI transcription and semantic search.
 
 ## 🚀 Quick Install
 
-**One-Command Installation** (Recommended):
+> **📥 Repository Setup Required**: Before using the installers below, ensure the repository is pushed to GitHub or use manual installation.
+
+**One-Command Installation** (once repository is available):
+
+**Unix/Linux/macOS:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
 ```
 
-**Alternative: Download & Run**:
-```bash
-# Download installer
-wget https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh
-# or: curl -O https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh
-
-# Make executable and run
-chmod +x install.sh
-./install.sh
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1 | iex
 ```
+
+**For Now: Manual Installation** (until repository is available):
+See the [Manual Installation](#-manual-installation) section below.
 
 **→ [📖 Complete Getting Started Guide](GETTING_STARTED.md)** ← *Start here if you're new!*
 
@@ -52,8 +55,8 @@ sudo apt install nodejs npm python3 python3-pip ffmpeg sqlite3
 pip3 install faster_whisper
 
 # Clone and setup Spiralmem
-git clone https://github.com/your-username/spiralmem-local.git
-cd spiralmem-local
+git clone https://github.com/spiralbewilder/spiralmem.git
+cd spiralmem
 npm install
 npm run build
 
@@ -70,8 +73,8 @@ brew install node python ffmpeg
 pip3 install faster_whisper
 
 # Clone and setup Spiralmem
-git clone https://github.com/your-username/spiralmem-local.git
-cd spiralmem-local
+git clone https://github.com/spiralbewilder/spiralmem.git
+cd spiralmem
 npm install
 npm run build
 
@@ -80,16 +83,29 @@ npm run cli -- --help
 ```
 
 ### Windows
+
+**Option 1: PowerShell Installer (Recommended)**
 ```powershell
-# Install dependencies via Chocolatey
+# Download and run PowerShell installer
+iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1 | iex
+
+# Or download first, then run
+curl -O https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1
+.\install.ps1
+```
+
+**Option 2: Manual Installation**
+```powershell
+# Install dependencies via Chocolatey or winget
 choco install nodejs python ffmpeg
+# or: winget install OpenJS.NodeJS Python.Python.3 Gyan.FFmpeg
 
 # Install Python packages
 pip install faster_whisper
 
 # Clone and setup Spiralmem
-git clone https://github.com/your-username/spiralmem-local.git
-cd spiralmem-local
+git clone https://github.com/spiralbewilder/spiralmem.git
+cd spiralmem
 npm install
 npm run build
 
