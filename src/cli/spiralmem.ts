@@ -81,6 +81,21 @@ program
   .option('--no-transcription', 'Skip transcription')
   .action(async (videoPath, options) => {
     try {
+      // Check if this is a YouTube URL
+      const isYouTubeUrl = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/.test(videoPath);
+      
+      if (isYouTubeUrl) {
+        console.error('❌ YouTube URL processing not yet implemented');
+        console.log('');
+        console.log('Currently, Spiralmem only supports local video files.');
+        console.log('YouTube integration is planned for a future release.');
+        console.log('');
+        console.log('To process a YouTube video:');
+        console.log('1. Download the video using yt-dlp or similar tool');
+        console.log('2. Then run: spiralmem add-video /path/to/downloaded/video.mp4');
+        process.exit(1);
+      }
+      
       if (!program.opts().quiet) {
         console.log(`🎥 Processing video: ${path.basename(videoPath)}`);
       }
