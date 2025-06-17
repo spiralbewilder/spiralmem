@@ -13,9 +13,7 @@ A privacy-first, local video memory system that transforms video files into sear
 
 ## 🚀 Quick Install
 
-> **📥 Repository Setup Required**: Before using the installers below, ensure the repository is pushed to GitHub or use manual installation.
-
-**One-Command Installation** (once repository is available):
+**One-Command Installation**:
 
 **Unix/Linux/macOS:**
 ```bash
@@ -27,8 +25,16 @@ curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/ins
 iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1 | iex
 ```
 
-**For Now: Manual Installation** (until repository is available):
-See the [Manual Installation](#-manual-installation) section below.
+**Alternative: Download & Run**:
+```bash
+# Unix/Linux/macOS
+wget https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh
+chmod +x install.sh && ./install.sh
+
+# Windows (PowerShell)
+curl -O https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1
+.\install.ps1
+```
 
 **→ [📖 Complete Getting Started Guide](GETTING_STARTED.md)** ← *Start here if you're new!*
 
