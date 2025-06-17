@@ -11,10 +11,8 @@ interface PromisifiedDatabase {
 }
 
 export abstract class BaseRepository {
-  protected db: PromisifiedDatabase;
-
-  constructor() {
-    this.db = database.getDb();
+  protected get db(): PromisifiedDatabase {
+    return database.getDb();
   }
 
   protected generateId(): string {
@@ -78,9 +76,9 @@ export abstract class BaseRepository {
     return { clause, params };
   }
 
-  // Transaction helper
-  protected transaction<T>(fn: () => T): T {
-    const transaction = this.db.transaction(fn);
-    return transaction();
-  }
+  // TODO: Implement transaction support when needed
+  // protected async transaction<T>(fn: () => Promise<T>): Promise<T> {
+  //   // Transaction implementation would go here
+  //   return fn();
+  // }
 }

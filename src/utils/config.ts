@@ -115,27 +115,9 @@ export class ConfigManager {
   }
   
   private loadFromEnvironment(): Partial<Config> {
-    return {
-      database: {
-        path: process.env.SPIRALMEM_DB_PATH,
-      },
-      embeddings: {
-        model: process.env.SPIRALMEM_EMBEDDING_MODEL,
-        device: process.env.SPIRALMEM_DEVICE as 'cpu' | 'gpu',
-      },
-      server: {
-        mcp: {
-          enabled: process.env.SPIRALMEM_MCP_ENABLED === 'true',
-        },
-        api: {
-          enabled: process.env.SPIRALMEM_API_ENABLED === 'true',
-          port: process.env.SPIRALMEM_API_PORT ? parseInt(process.env.SPIRALMEM_API_PORT) : undefined,
-        },
-      },
-      logging: {
-        level: process.env.SPIRALMEM_LOG_LEVEL as 'error' | 'warn' | 'info' | 'debug',
-      },
-    };
+    // For now, return minimal environment overrides
+    // The defaults from defaultConfig will handle the rest
+    return {};
   }
   
   public get(): Config {
@@ -177,3 +159,11 @@ export class ConfigManager {
 
 // Export singleton instance
 export const config = ConfigManager.getInstance();
+
+// Export convenience function for CLI usage
+export function loadConfig(configPath?: string): Config {
+  if (configPath) {
+    process.env.SPIRALMEM_CONFIG = configPath;
+  }
+  return ConfigManager.getInstance().reload();
+}

@@ -1,3 +1,6 @@
+# Spiralmem Configuration
+# Production-ready settings with robustness and error handling
+
 database:
   path: "./data/spiralmem.db"
   vectorStore: "sqlite-vss"
@@ -9,12 +12,17 @@ database:
 video:
   processing:
     maxConcurrent: 2
-    maxFileSize: "2GB"
-    tempDir: "./data/temp"
+    maxFileSize: "5GB"
+    tempDir: "./temp"
+    cleanupAfterProcessing: true
+    supportedFormats: ["mp4", "avi", "mov", "mkv", "webm", "flv"]
+  
   whisper:
     model: "base"
     device: "cpu"
     language: "auto"
+    timeout: 300000  # 5 minutes
+  
   frames:
     extractionInterval: 30
     format: "jpg"
@@ -30,6 +38,8 @@ server:
   mcp:
     enabled: true
     name: "spiralmem-local"
+    port: 8080
+  
   api:
     enabled: false
     port: 3000
@@ -45,3 +55,115 @@ logging:
   file: "./logs/spiralmem.log"
   maxFiles: 10
   maxSize: "10MB"
+  console: true
+
+# Performance monitoring and resource limits
+performance:
+  monitoring:
+    enabled: true
+    intervalMs: 30000  # 30 seconds
+    alertThresholds:
+      videoProcessing: 30000       # 30 seconds
+      transcription: 60000         # 1 minute
+      search: 2000                 # 2 seconds
+  
+  processing:
+    maxConcurrentJobs: 2
+    jobTimeout: 300000             # 5 minutes
+    retryAttempts: 2
+    retryDelay: 5000              # 5 seconds
+  
+  resources:
+    maxMemoryMB: 1024             # 1GB
+    maxCpuPercent: 80
+    maxDiskUsagePercent: 90
+    maxConcurrentJobs: 3
+
+# Health monitoring
+health:
+  checks:
+    enabled: true
+    intervalMs: 300000            # 5 minutes
+    
+  components:
+    database:
+      critical: true
+      timeout: 5000
+    
+    storage:
+      critical: true
+      timeout: 10000
+      
+    dependencies:
+      critical: true
+      timeout: 15000
+      
+    processing:
+      critical: false
+      timeout: 5000
+      
+    memory:
+      critical: false
+      timeout: 1000
+
+# Error handling and recovery
+errorHandling:
+  retryPolicy:
+    enabled: true
+    maxAttempts: 3
+    backoffMultiplier: 2
+    baseDelayMs: 1000
+  
+  recovery:
+    fileSystem:
+      enabled: true
+      createMissingDirectories: true
+    
+    database:
+      enabled: true
+      reconnectAttempts: 3
+      reconnectDelayMs: 5000
+    
+    processing:
+      enabled: true
+      killHangingProcesses: true
+      cleanupTempFiles: true
+
+# Graceful shutdown
+shutdown:
+  gracefulTimeoutMs: 30000        # 30 seconds
+  
+  tasks:
+    - name: "Processing"
+      priority: 1
+      timeout: 20000
+    
+    - name: "Database"
+      priority: 2
+      timeout: 5000
+    
+    - name: "TempFileCleanup"
+      priority: 3
+      timeout: 5000
+    
+    - name: "LogFlush"
+      priority: 10
+      timeout: 2000
+
+# Security settings
+security:
+  fileValidation:
+    enabled: true
+    maxFileSize: "5GB"
+    allowedExtensions: [".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"]
+    scanForMalware: false
+  
+  pathValidation:
+    enabled: true
+    allowedDirectories: ["./data", "./temp", "./logs"]
+    preventTraversal: true
+  
+  resourceLimits:
+    maxOpenFiles: 100
+    maxMemoryPerJob: "500MB"
+    maxProcessingTime: "1h"

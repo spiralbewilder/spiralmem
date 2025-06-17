@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+
+// Spiralmem CLI Entry Point
+// This is a simple wrapper that loads the TypeScript/compiled CLI
+
+import { program } from '../src/cli/spiralmem.js';
+
+// Execute the CLI
+program.parse();

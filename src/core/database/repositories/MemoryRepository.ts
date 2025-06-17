@@ -15,26 +15,7 @@ interface MemoryRow {
 }
 
 export class MemoryRepository extends BaseRepository {
-  private insertStmt = this.db.prepare(`
-    INSERT INTO memories (id, space_id, content_type, title, content, source, file_path, metadata, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  private updateStmt = this.db.prepare(`
-    UPDATE memories 
-    SET title = ?, content = ?, metadata = ?, updated_at = ?
-    WHERE id = ?
-  `);
-
-  private selectByIdStmt = this.db.prepare(`
-    SELECT * FROM memories WHERE id = ?
-  `);
-
-  private deleteStmt = this.db.prepare(`
-    DELETE FROM memories WHERE id = ?
-  `);
-
-  create(input: ContentInput): Memory {
+  async create(input: ContentInput): Promise<Memory> {
     const id = this.generateId();
     const now = this.formatDate(new Date());
     const spaceId = input.spaceId || 'default';
@@ -53,37 +34,38 @@ export class MemoryRepository extends BaseRepository {
       updatedAt: new Date(),
     };
 
-    this.insertStmt.run(
-      id,
-      spaceId,
-      contentType,
-      input.title || null,
-      input.content,
-      input.source,
-      input.filePath || null,
-      this.serializeJson(memory.metadata),
-      now,
-      now
-    );
+    await this.db.run(`
+      INSERT INTO memories (id, space_id, content_type, title, content, source, file_path, metadata, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, id, spaceId, contentType, input.title || null, input.content, input.source, 
+       input.filePath || null, this.serializeJson(memory.metadata), now, now);
 
     return memory;
   }
 
-  findById(id: string): Memory | null {
-    const row = this.selectByIdStmt.get(id) as MemoryRow | undefined;
+  async findById(id: string): Promise<Memory | null> {
+    const row = await this.db.get('SELECT * FROM memories WHERE id = ?', id) as MemoryRow | undefined;
     return row ? this.mapRowToMemory(row) : null;
   }
 
-  findBySpace(spaceId: string, limit?: number, offset?: number): Memory[] {
+  async findBySpace(spaceId: string, limit?: number, offset?: number): Promise<Memory[]> {
     let query = 'SELECT * FROM memories WHERE space_id = ? ORDER BY created_at DESC';
-    query = this.addPagination(query, limit, offset);
+    const params: any[] = [spaceId];
     
-    const stmt = this.db.prepare(query);
-    const rows = stmt.all(spaceId) as MemoryRow[];
+    if (limit) {
+      query += ' LIMIT ?';
+      params.push(limit);
+      if (offset) {
+        query += ' OFFSET ?';
+        params.push(offset);
+      }
+    }
+    
+    const rows = await this.db.all(query, ...params) as MemoryRow[];
     return rows.map(row => this.mapRowToMemory(row));
   }
 
-  findByContentType(contentType: string, spaceId?: string, limit?: number, offset?: number): Memory[] {
+  async findByContentType(contentType: string, spaceId?: string, limit?: number, offset?: number): Promise<Memory[]> {
     let query = 'SELECT * FROM memories WHERE content_type = ?';
     const params: any[] = [contentType];
 
@@ -93,19 +75,25 @@ export class MemoryRepository extends BaseRepository {
     }
 
     query += ' ORDER BY created_at DESC';
-    query = this.addPagination(query, limit, offset);
+    
+    if (limit) {
+      query += ' LIMIT ?';
+      params.push(limit);
+      if (offset) {
+        query += ' OFFSET ?';
+        params.push(offset);
+      }
+    }
 
-    const stmt = this.db.prepare(query);
-    const rows = stmt.all(...params) as MemoryRow[];
+    const rows = await this.db.all(query, ...params) as MemoryRow[];
     return rows.map(row => this.mapRowToMemory(row));
   }
 
-  search(query: SearchQuery): SearchResult[] {
-    // Basic keyword search implementation
-    // This will be enhanced with vector search later
+  async search(query: SearchQuery): Promise<SearchResult[]> {
+    // Enhanced keyword search implementation
     let sql = `
       SELECT * FROM memories 
-      WHERE content LIKE ? OR title LIKE ?
+      WHERE (content LIKE ? OR title LIKE ?)
     `;
     const params: any[] = [`%${query.query}%`, `%${query.query}%`];
 
@@ -129,20 +117,27 @@ export class MemoryRepository extends BaseRepository {
     }
 
     sql += ' ORDER BY created_at DESC';
-    sql = this.addPagination(sql, query.limit, query.offset);
+    
+    if (query.limit) {
+      sql += ' LIMIT ?';
+      params.push(query.limit);
+      if (query.offset) {
+        sql += ' OFFSET ?';
+        params.push(query.offset);
+      }
+    }
 
-    const stmt = this.db.prepare(sql);
-    const rows = stmt.all(...params) as MemoryRow[];
+    const rows = await this.db.all(sql, ...params) as MemoryRow[];
     
     return rows.map(row => ({
       memory: this.mapRowToMemory(row),
-      similarity: 0.8, // Placeholder similarity score
+      similarity: this.calculateSimilarity(row.content, query.query),
       highlights: this.extractHighlights(row.content, query.query),
     }));
   }
 
-  update(id: string, updates: Partial<Pick<Memory, 'title' | 'content' | 'metadata'>>): boolean {
-    const existing = this.findById(id);
+  async update(id: string, updates: Partial<Pick<Memory, 'title' | 'content' | 'metadata'>>): Promise<boolean> {
+    const existing = await this.findById(id);
     if (!existing) {
       return false;
     }
@@ -153,23 +148,22 @@ export class MemoryRepository extends BaseRepository {
       updatedAt: new Date(),
     };
 
-    const result = this.updateStmt.run(
-      updatedMemory.title || null,
-      updatedMemory.content,
-      this.serializeJson(updatedMemory.metadata),
-      this.formatDate(updatedMemory.updatedAt),
-      id
-    );
+    const result = await this.db.run(`
+      UPDATE memories 
+      SET title = ?, content = ?, metadata = ?, updated_at = ?
+      WHERE id = ?
+    `, updatedMemory.title || null, updatedMemory.content, 
+       this.serializeJson(updatedMemory.metadata), this.formatDate(updatedMemory.updatedAt), id);
 
     return result.changes > 0;
   }
 
-  delete(id: string): boolean {
-    const result = this.deleteStmt.run(id);
+  async delete(id: string): Promise<boolean> {
+    const result = await this.db.run('DELETE FROM memories WHERE id = ?', id);
     return result.changes > 0;
   }
 
-  count(spaceId?: string): number {
+  async count(spaceId?: string): Promise<number> {
     let query = 'SELECT COUNT(*) as count FROM memories';
     const params: any[] = [];
 
@@ -178,12 +172,11 @@ export class MemoryRepository extends BaseRepository {
       params.push(spaceId);
     }
 
-    const stmt = this.db.prepare(query);
-    const result = stmt.get(...params) as { count: number };
+    const result = await this.db.get(query, ...params) as { count: number };
     return result.count;
   }
 
-  getRecentMemories(limit = 10, spaceId?: string): Memory[] {
+  async getRecentMemories(limit = 10, spaceId?: string): Promise<Memory[]> {
     let query = 'SELECT * FROM memories';
     const params: any[] = [];
 
@@ -195,12 +188,11 @@ export class MemoryRepository extends BaseRepository {
     query += ' ORDER BY created_at DESC LIMIT ?';
     params.push(limit);
 
-    const stmt = this.db.prepare(query);
-    const rows = stmt.all(...params) as MemoryRow[];
+    const rows = await this.db.all(query, ...params) as MemoryRow[];
     return rows.map(row => this.mapRowToMemory(row));
   }
 
-  getContentTypeBreakdown(spaceId?: string): Record<string, number> {
+  async getContentTypeBreakdown(spaceId?: string): Promise<Record<string, number>> {
     let query = 'SELECT content_type, COUNT(*) as count FROM memories';
     const params: any[] = [];
 
@@ -211,8 +203,7 @@ export class MemoryRepository extends BaseRepository {
 
     query += ' GROUP BY content_type';
 
-    const stmt = this.db.prepare(query);
-    const rows = stmt.all(...params) as { content_type: string; count: number }[];
+    const rows = await this.db.all(query, ...params) as { content_type: string; count: number }[];
     
     const breakdown: Record<string, number> = {};
     for (const row of rows) {
@@ -220,6 +211,35 @@ export class MemoryRepository extends BaseRepository {
     }
     
     return breakdown;
+  }
+
+  // Full-text search using SQLite FTS5 (when available)
+  async fullTextSearch(query: string, spaceId?: string, limit?: number): Promise<SearchResult[]> {
+    // This will be enhanced when we implement FTS5 virtual tables
+    // For now, fall back to regular search
+    return this.search({
+      query,
+      spaceId,
+      limit: limit || 20,
+    });
+  }
+
+  // Find related content based on similar metadata or content
+  async findRelated(memoryId: string, limit = 5): Promise<Memory[]> {
+    const memory = await this.findById(memoryId);
+    if (!memory) {
+      return [];
+    }
+
+    // Simple related content based on content type and space
+    const rows = await this.db.all(`
+      SELECT * FROM memories 
+      WHERE id != ? AND space_id = ? AND content_type = ?
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `, memoryId, memory.spaceId, memory.contentType, limit) as MemoryRow[];
+
+    return rows.map(row => this.mapRowToMemory(row));
   }
 
   private mapRowToMemory(row: MemoryRow): Memory {
@@ -235,6 +255,21 @@ export class MemoryRepository extends BaseRepository {
       createdAt: this.parseDate(row.created_at),
       updatedAt: this.parseDate(row.updated_at),
     };
+  }
+
+  private calculateSimilarity(content: string, query: string): number {
+    // Simple similarity based on keyword matches
+    const queryWords = query.toLowerCase().split(' ').filter(word => word.length > 2);
+    const contentWords = content.toLowerCase().split(' ');
+    
+    let matches = 0;
+    for (const queryWord of queryWords) {
+      if (contentWords.some(word => word.includes(queryWord))) {
+        matches++;
+      }
+    }
+    
+    return queryWords.length > 0 ? matches / queryWords.length : 0;
   }
 
   private extractHighlights(content: string, query: string, maxLength = 200): string[] {
