@@ -583,7 +583,8 @@ verify_installation() {
     fi
     
     # Test 2: Version check
-    local version=$(spiralmem --version 2>/dev/null || echo "")
+    local version_output=$(spiralmem --quiet --version 2>/dev/null || echo "")
+    local version=$(echo "$version_output" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
     if [[ -n "$version" ]]; then
         test_results+=("version:PASS($version)")
     else
