@@ -95,16 +95,16 @@ OPTIONS:
 
 EXAMPLES:
     # Standard installation
-    curl -fsSL https://install.spiralmem.com | sh
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
 
     # Silent installation
-    curl -fsSL https://install.spiralmem.com | sh -s -- --silent
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh -s -- --silent
 
     # System-wide installation
-    curl -fsSL https://install.spiralmem.com | sudo sh -s -- --system-wide
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sudo sh -s -- --system-wide
 
     # Development installation
-    curl -fsSL https://install.spiralmem.com | sh -s -- --dev
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh -s -- --dev
 
 EOF
 }
@@ -442,11 +442,10 @@ install_spiralmem_dev() {
 
 # Release installation (download prebuilt)
 install_spiralmem_release() {
-    log_info "Installing Spiralmem from release..."
+    log_info "Installing Spiralmem from GitHub source..."
     
-    # For now, use development installation since we don't have releases yet
-    # TODO: Implement when we have GitHub releases
-    log_warning "Release packages not yet available, using development installation"
+    # Clone from GitHub since we don't have packaged releases yet
+    log_info "Installing from source (recommended for latest features)"
     install_spiralmem_dev
 }
 

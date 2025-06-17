@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)]()
 
-> **🚀 INSTALL NOW**: `curl -fsSL https://install.spiralmem.com | sh`
+> **🚀 INSTALL NOW**: `curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh`
 
 A privacy-first, local video memory system that transforms video files into searchable, organized memories using AI transcription and semantic search.
 
@@ -13,7 +13,18 @@ A privacy-first, local video memory system that transforms video files into sear
 
 **One-Command Installation** (Recommended):
 ```bash
-curl -fsSL https://install.spiralmem.com | sh
+curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
+```
+
+**Alternative: Download & Run**:
+```bash
+# Download installer
+wget https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh
+# or: curl -O https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh
+
+# Make executable and run
+chmod +x install.sh
+./install.sh
 ```
 
 **→ [📖 Complete Getting Started Guide](GETTING_STARTED.md)** ← *Start here if you're new!*

@@ -6,7 +6,7 @@ Welcome to Spiralmem! This guide will walk you through your first steps with the
 
 ### One-Command Install (Recommended)
 ```bash
-curl -fsSL https://install.spiralmem.com | sh
+curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
 ```
 
 The installer will:
