@@ -6,7 +6,7 @@
 [![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)]()
 
 > **🚀 INSTALL NOW**: 
-> - **Unix/Linux/macOS**: `curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh`
+> - **Unix/Linux/macOS**: `curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | bash`
 > - **Windows**: `iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1 | iex`
 
 A privacy-first, local video memory system that transforms video files into searchable, organized memories using AI transcription and semantic search.
@@ -17,7 +17,7 @@ A privacy-first, local video memory system that transforms video files into sear
 
 **Unix/Linux/macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | bash
 ```
 
 **Windows (PowerShell):**
@@ -29,7 +29,7 @@ iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/inst
 ```bash
 # Unix/Linux/macOS
 wget https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh
-chmod +x install.sh && ./install.sh
+chmod +x install.sh && bash install.sh
 
 # Windows (PowerShell)
 curl -O https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1

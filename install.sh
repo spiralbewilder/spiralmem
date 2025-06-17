@@ -1,6 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Spiralmem Universal Installer
 # Cross-platform installation script for Spiralmem Video Memory System
+# 
+# IMPORTANT: This script requires bash, not sh
+# Usage: curl -fsSL <url> | bash (NOT sh)
 
 set -e  # Exit on any error
 
@@ -95,16 +98,16 @@ OPTIONS:
 
 EXAMPLES:
     # Standard installation
-    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | bash
 
     # Silent installation
-    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh -s -- --silent
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | bash -s -- --silent
 
     # System-wide installation
-    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sudo sh -s -- --system-wide
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sudo bash -s -- --system-wide
 
     # Development installation
-    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh -s -- --dev
+    curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | bash -s -- --dev
 
 EOF
 }
@@ -454,7 +457,7 @@ create_executable_script() {
     log_info "Creating executable script..."
     
     cat > "$BIN_DIR/spiralmem" << EOF
-#!/bin/bash
+#!/usr/bin/env bash
 # Spiralmem executable wrapper
 
 # Set environment variables
