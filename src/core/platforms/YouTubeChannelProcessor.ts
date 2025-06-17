@@ -249,12 +249,12 @@ export class YouTubeChannelProcessor {
           successfullyProcessed: processingResults.successful.length,
           failedProcessing: processingResults.failed.length,
           alreadyExisted: filteredVideos.length - newVideos.length,
-          totalChunksGenerated: processingResults.successful.reduce((sum, r) => sum + (r.chunks?.length || 0), 0),
-          totalEmbeddingsCreated: processingResults.successful.reduce((sum, r) => sum + (r.embeddings?.length || 0), 0),
+          totalChunksGenerated: processingResults.successful.reduce((sum: number, r: any) => sum + (r.chunks?.length || 0), 0),
+          totalEmbeddingsCreated: processingResults.successful.reduce((sum: number, r: any) => sum + (r.embeddings?.length || 0), 0),
           totalProcessingTime: totalTime
         },
         contentAnalysis,
-        errors: processingResults.failed.map(f => ({
+        errors: processingResults.failed.map((f: any) => ({
           videoId: f.item.videoId || 'unknown',
           videoTitle: f.item.title || 'unknown',
           error: f.error,
@@ -448,11 +448,9 @@ export class YouTubeChannelProcessor {
 
         // Process individual video
         return await this.videoWorkflow.processVideo(video.videoId, 'channel-batch', {
-          enableTranscripts: processingOptions.enableTranscripts !== false,
-          enableFrameExtraction: processingOptions.enableFrameExtraction || false,
-          enableThumbnails: processingOptions.enableThumbnails !== false,
+          enableTranscription: processingOptions.enableTranscripts !== false,
+          enableFrameSampling: processingOptions.enableFrameExtraction || false,
           chunkingOptions: {
-            strategy: processingOptions.chunkingStrategy || 'time-based',
             chunkSize: 2000, // Larger chunks for channel processing
             overlapSize: 200
           }

@@ -506,7 +506,7 @@ export class YouTubeAdvancedConnector extends YouTubeConnector {
     };
   }
 
-  private async getChannelVideos(channelId: string, maxVideos = 50): Promise<string[]> {
+  async getChannelVideos(channelId: string, maxVideos = 50): Promise<string[]> {
     if (!this.apiKey) {
       throw new Error('YouTube API key required');
     }

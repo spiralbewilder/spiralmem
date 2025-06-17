@@ -120,11 +120,11 @@ export class ProcessingShutdownTask implements ShutdownTask {
       const repo = new VideoProcessingRepository();
       
       // Find jobs that are currently processing
-      const processingJobs = await repo.findByStatus('processing');
+      const processingJobs = await repo.findJobsByStatus('processing');
       
       for (const job of processingJobs) {
         // Mark as failed due to shutdown
-        await repo.updateStatus(job.id, 'failed', 'System shutdown');
+        await repo.updateJobStatus(job.id, 'failed', undefined, 'System shutdown');
         logger.info(`Marked processing job as failed due to shutdown: ${job.id}`);
       }
     } catch (error) {

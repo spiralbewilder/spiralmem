@@ -641,4 +641,30 @@ export class YouTubeConnector extends PlatformConnector {
       tags: { platform: this.platform, ...tags }
     });
   }
+
+  /**
+   * Get channel information
+   */
+  async getChannelInfo(channelId: string): Promise<any> {
+    // TODO: Implement channel info retrieval
+    return {
+      id: channelId,
+      title: 'Channel Title',
+      subscriberCount: 0,
+      videoCount: 0,
+      description: 'Channel description'
+    };
+  }
+
+  /**
+   * Get videos from a channel
+   */
+  async getChannelVideos(channelId: string, options?: any): Promise<any> {
+    // TODO: Implement channel videos retrieval  
+    return {
+      videos: [],
+      nextPageToken: null,
+      totalResults: 0
+    };
+  }
 }

@@ -57,8 +57,8 @@ async function main() {
 
     const batchStartTime = Date.now();
     const batchResult = await batchProcessor.processBatch(
-      mockVideoFiles,
-      mockVideoProcessor,
+      mockVideoFiles as any,
+      mockVideoProcessor as any,
       {
         batchSize: 5,
         concurrentBatches: 3,

@@ -194,7 +194,6 @@ export class ErrorHandler {
     if (error.message.includes('ENOENT')) {
       return new ProcessingError(
         'File or directory not found',
-        'PROCESSING_ERROR',
         { type: 'file_access', originalError: error.message },
         true
       );
@@ -203,7 +202,6 @@ export class ErrorHandler {
     if (error.message.includes('EACCES')) {
       return new SystemError(
         'Permission denied',
-        'SYSTEM_ERROR',
         { type: 'permission_denied', originalError: error.message },
         false
       );
@@ -212,7 +210,6 @@ export class ErrorHandler {
     if (error.message.includes('SQLITE')) {
       return new DatabaseError(
         'Database operation failed',
-        'DATABASE_ERROR',
         { type: 'query_failed', originalError: error.message },
         true
       );
@@ -371,11 +368,4 @@ export function setupGlobalErrorHandlers(): void {
   });
 }
 
-export {
-  SpiralmemError,
-  ValidationError,
-  ProcessingError,
-  DatabaseError,
-  SystemError,
-  ConfigurationError
-};
+// Error classes are already exported above

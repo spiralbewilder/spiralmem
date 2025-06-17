@@ -157,8 +157,7 @@ export class ScaleTestRunner {
       testVideos,
       async (videoPath: string) => {
         return await this.videoWorkflow.processVideo(videoPath, 'scale-test', {
-          enableFrameExtraction: false, // Disable to focus on core processing
-          enableThumbnails: false,
+          enableFrameSampling: false, // Disable to focus on core processing
           chunkingOptions: {
             chunkSize: 1000, // Smaller chunks for faster processing
             overlapSize: 100

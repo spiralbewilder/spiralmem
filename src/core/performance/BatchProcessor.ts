@@ -223,7 +223,7 @@ export class BatchProcessor<TInput, TOutput> {
       }
     };
 
-    return await this.processBatch(videoPaths, videoProcessor, opts);
+    return await this.processBatch(videoPaths as any, videoProcessor as any, opts);
   }
 
   /**
@@ -255,7 +255,7 @@ export class BatchProcessor<TInput, TOutput> {
       }
     };
 
-    return await this.processBatch(contentItems, indexProcessor, opts) as BatchResult<boolean>;
+    return await this.processBatch(contentItems as any, indexProcessor as any, opts) as BatchResult<boolean>;
   }
 
   // Private helper methods

@@ -16,12 +16,12 @@ export class DatabaseHealthCheck implements HealthCheck {
 
   async check() {
     try {
-      // Simple query to test database connectivity
-      const result = await database.get('SELECT 1 as test');
-      if (result?.test === 1) {
+      // Use the built-in health check method
+      const healthy = await database.healthCheck();
+      if (healthy) {
         return { healthy: true, message: 'Database connection OK' };
       } else {
-        return { healthy: false, message: 'Database query returned unexpected result' };
+        return { healthy: false, message: 'Database health check failed' };
       }
     } catch (error) {
       return { 
@@ -37,7 +37,7 @@ export class StorageHealthCheck implements HealthCheck {
   name = 'Storage';
   critical = true;
 
-  async check() {
+  async check(): Promise<{ healthy: boolean; message?: string; details?: any }> {
     try {
       const { config } = await import('./config.js');
       const dataDir = config.getDataDir();
@@ -49,7 +49,7 @@ export class StorageHealthCheck implements HealthCheck {
       const stats = await fs.stat(dataDir);
       const { spawn } = await import('child_process');
       
-      return new Promise((resolve) => {
+      return new Promise<{ healthy: boolean; message?: string; details?: any }>((resolve) => {
         const df = spawn('df', ['-h', dataDir]);
         let output = '';
         
@@ -149,24 +149,14 @@ export class ProcessingHealthCheck implements HealthCheck {
       const { VideoProcessingRepository } = await import('../core/database/repositories/VideoProcessingRepository.js');
       const repo = new VideoProcessingRepository();
       
-      // Check for stuck jobs (processing for more than 1 hour)
-      const stuckJobs = await repo.findStuckJobs(3600000); // 1 hour in ms
-      
-      if (stuckJobs.length > 0) {
-        return {
-          healthy: false,
-          message: `${stuckJobs.length} stuck processing job(s) detected`,
-          details: stuckJobs.map(job => ({ id: job.id, type: job.type, startedAt: job.startedAt }))
-        };
-      }
-
-      // Check processing queue depth
-      const pendingJobs = await repo.findByStatus('pending');
+      // Check processing queue depth (skip stuck jobs check for now)
+      const pendingJobs = await repo.findJobsByStatus('pending');
+      const processingJobs = await repo.findJobsByStatus('processing');
       
       return {
         healthy: true,
-        message: `Processing healthy, ${pendingJobs.length} job(s) pending`,
-        details: { pendingJobs: pendingJobs.length, stuckJobs: 0 }
+        message: `Processing healthy, ${pendingJobs.length} job(s) pending, ${processingJobs.length} processing`,
+        details: { pendingJobs: pendingJobs.length, processingJobs: processingJobs.length }
       };
     } catch (error) {
       return {

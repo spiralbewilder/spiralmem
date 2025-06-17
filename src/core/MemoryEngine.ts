@@ -77,7 +77,7 @@ export class MemoryEngine {
     }
   }
 
-  async healthCheck(): Promise<boolean> {
+  async systemHealthCheck(): Promise<boolean> {
     try {
       this.ensureInitialized();
       

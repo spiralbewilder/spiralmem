@@ -129,7 +129,7 @@ export class ResourceMonitor extends EventEmitter {
     try {
       const { VideoProcessingRepository } = await import('../core/database/repositories/VideoProcessingRepository.js');
       const repo = new VideoProcessingRepository();
-      const activeJobs = await repo.findByStatus('processing');
+      const activeJobs = await repo.findJobsByStatus('processing');
       return activeJobs.length;
     } catch (error) {
       logger.debug('Failed to get active jobs count:', error);
