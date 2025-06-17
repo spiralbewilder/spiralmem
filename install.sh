@@ -241,11 +241,18 @@ check_dependencies() {
         
         if [[ $SILENT_MODE == false ]]; then
             echo
-            read -p "Install missing dependencies? (y/N): " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                log_error "Dependencies required for installation. Exiting."
-                exit 1
+            if [[ -t 0 ]]; then
+                # Running interactively
+                read -p "Install missing dependencies? (y/N): " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    log_error "Dependencies required for installation. Exiting."
+                    exit 1
+                fi
+            else
+                # Running via pipe - auto-install dependencies
+                log_warning "Running via pipe - automatically installing dependencies"
+                log_info "Use --silent flag to suppress this message"
             fi
         fi
         
@@ -657,11 +664,18 @@ main() {
             echo
         fi
         
-        read -p "Continue with installation? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Installation cancelled by user"
-            exit 0
+        if [[ -t 0 ]]; then
+            # Running interactively
+            read -p "Continue with installation? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                log_info "Installation cancelled by user"
+                exit 0
+            fi
+        else
+            # Running via pipe - auto-continue with warning
+            log_warning "Running via pipe - continuing automatically"
+            log_info "Use --silent flag to suppress this message"
         fi
         echo
     fi
