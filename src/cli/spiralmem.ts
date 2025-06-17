@@ -484,7 +484,7 @@ process.on('uncaughtException', (error) => {
 });
 
 // Parse arguments and execute
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   // Configure logging based on CLI options
   if (process.argv.includes('--verbose')) {
     logger.level = 'debug';
