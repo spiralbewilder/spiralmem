@@ -604,6 +604,9 @@ verify_installation() {
     
     local test_results=()
     
+    # Temporarily add bin directory to PATH for verification
+    export PATH="$BIN_DIR:$PATH"
+    
     # Test 1: Command availability
     if command -v spiralmem >/dev/null 2>&1; then
         test_results+=("command:PASS")
