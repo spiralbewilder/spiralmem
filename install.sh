@@ -399,7 +399,24 @@ install_python_packages() {
     
     if [[ ! -d "$venv_dir" ]]; then
         log_info "Creating Python virtual environment..."
-        python3 -m venv "$venv_dir"
+        
+        # On Ubuntu 24.04, we might need python3-full
+        if ! python3 -m venv "$venv_dir" 2>/dev/null; then
+            log_warning "Virtual environment creation failed, installing python3-full..."
+            if command_exists apt; then
+                sudo apt update && sudo apt install -y python3-full python3-venv
+            fi
+            python3 -m venv "$venv_dir"
+        fi
+        
+        log_info "Virtual environment created successfully"
+    fi
+    
+    # Verify venv was created properly
+    if [[ ! -f "$venv_dir/bin/pip" ]]; then
+        log_error "Virtual environment pip not found at $venv_dir/bin/pip"
+        log_error "Virtual environment creation may have failed"
+        exit 1
     fi
     
     # Install faster_whisper using virtual environment directly
