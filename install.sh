@@ -402,18 +402,13 @@ install_python_packages() {
         python3 -m venv "$venv_dir"
     fi
     
-    # Activate virtual environment and install packages
-    source "$venv_dir/bin/activate"
-    
-    # Install faster_whisper (always install in fresh venv or if missing)
+    # Install faster_whisper using virtual environment directly
     if [[ ! -d "$venv_dir" ]] || ! "$venv_dir/bin/python" -c "import faster_whisper" 2>/dev/null; then
         log_info "Installing faster_whisper..."
-        pip install faster_whisper
+        "$venv_dir/bin/pip" install faster_whisper
     else
         log_info "faster_whisper already installed"
     fi
-    
-    deactivate
 }
 
 # Download and install Spiralmem
