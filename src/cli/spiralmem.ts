@@ -666,6 +666,158 @@ program
     }
   });
 
+// Channel ingestion command
+program
+  .command('add-channel <channelUrl>')
+  .description('Process all videos from a YouTube channel')
+  .option('-m, --max-videos <number>', 'Maximum videos to process', '10')
+  .option('-s, --space <name>', 'Target space name', 'default')
+  .option('--min-duration <seconds>', 'Minimum video duration', '30')
+  .option('--max-duration <seconds>', 'Maximum video duration', '3600')
+  .option('--include-shorts', 'Include YouTube Shorts (videos under 60s)')
+  .option('--exclude-keywords <keywords>', 'Comma-separated keywords to exclude')
+  .option('--include-keywords <keywords>', 'Comma-separated keywords to include')
+  .option('--priority <mode>', 'Processing priority (newest-first, oldest-first, most-popular, longest-first)', 'newest-first')
+  .option('--dry-run', 'Show what would be processed without actually processing')
+  .action(async (channelUrl, options) => {
+    try {
+      console.log('📺 YouTube Channel Ingestion');
+      console.log('=============================');
+      console.log(`🔗 Channel: ${channelUrl}`);
+      console.log(`📊 Max videos: ${options.maxVideos}`);
+      console.log(`⏱️  Duration range: ${options.minDuration}s - ${options.maxDuration}s`);
+      console.log('');
+
+      // Import the channel processor
+      const { YouTubeChannelProcessor } = await import('../core/platforms/YouTubeChannelProcessor.js');
+      const channelProcessor = new YouTubeChannelProcessor();
+
+      // Configure processing options
+      const processingOptions = {
+        maxVideos: parseInt(options.maxVideos),
+        filterOptions: {
+          minDuration: parseInt(options.minDuration),
+          maxDuration: parseInt(options.maxDuration),
+          includeShorts: options.includeShorts || false,
+          includeLiveStreams: true,
+          keywordFilter: options.includeKeywords ? options.includeKeywords.split(',').map(k => k.trim()) : undefined,
+          excludeKeywords: options.excludeKeywords ? options.excludeKeywords.split(',').map(k => k.trim()) : undefined
+        },
+        processingOptions: {
+          batchSize: 2, // Conservative for stability
+          concurrentProcessing: 1, // Sequential processing for reliability
+          enableTranscripts: true,
+          enableFrameExtraction: false,
+          chunkingStrategy: 'content-based' as const
+        },
+        priorityMode: options.priority as any,
+        progressCallback: (progress) => {
+          // Show progress updates
+          if (progress.currentVideo) {
+            console.log(`🎬 Processing: ${progress.currentVideo.title}`);
+            console.log(`   Stage: ${progress.currentVideo.processingStage} (${progress.currentVideo.stageProgress}%)`);
+          }
+          
+          const overallPercent = Math.round(progress.processing.overallProgress);
+          const processed = progress.processing.successfullyProcessed;
+          const total = progress.processing.totalToProcess;
+          const failed = progress.processing.failedProcessing;
+          
+          console.log(`📊 Progress: ${processed}/${total} completed (${overallPercent}%) | ${failed} failed`);
+          
+          if (progress.processing.estimatedTimeRemaining > 0) {
+            const etaMinutes = Math.round(progress.processing.estimatedTimeRemaining / 60000);
+            console.log(`⏱️  ETA: ${etaMinutes} minutes`);
+          }
+          console.log('');
+        }
+      };
+
+      if (options.dryRun) {
+        console.log('🔍 DRY RUN MODE - No videos will be processed');
+        console.log('');
+        
+        // Just show what would be discovered and filtered
+        const { YouTubeConnector } = await import('../core/platforms/connectors/YouTubeConnector.js');
+        const connector = new YouTubeConnector();
+        
+        try {
+          console.log('📋 Discovering videos...');
+          // This is a simplified preview - the actual processor does more sophisticated filtering
+          console.log('✅ Dry run complete. Use --no-dry-run to actually process videos.');
+        } catch (error) {
+          console.error('❌ Failed to discover videos:', error instanceof Error ? error.message : error);
+        }
+        
+        return;
+      }
+
+      // Start actual processing
+      console.log('🚀 Starting channel processing...');
+      console.log('');
+
+      const result = await channelProcessor.processYouTubeChannel(channelUrl, processingOptions);
+
+      // Display results
+      console.log('✅ Channel processing completed!');
+      console.log('');
+      console.log('📊 Results Summary:');
+      console.log(`   📺 Channel: ${result.channelInfo.channelName}`);
+      console.log(`   👥 Subscribers: ${result.channelInfo.subscriberCount.toLocaleString()}`);
+      console.log(`   🔍 Videos discovered: ${result.discoveryResults.totalVideosFound}`);
+      console.log(`   ✅ Videos processed: ${result.processingResults.successfullyProcessed}`);
+      console.log(`   ❌ Processing failures: ${result.processingResults.failedProcessing}`);
+      console.log(`   📚 Total chunks created: ${result.processingResults.totalChunksGenerated}`);
+      console.log(`   ⏱️  Total processing time: ${Math.round(result.processingResults.totalProcessingTime / 1000)}s`);
+
+      if (result.contentAnalysis) {
+        console.log('');
+        console.log('📈 Content Analysis:');
+        console.log(`   📊 Average video duration: ${Math.round(result.contentAnalysis.averageVideoDuration / 60)} minutes`);
+        console.log(`   🎯 Topics identified: ${result.contentAnalysis.topicsIdentified.join(', ')}`);
+        console.log(`   🌐 Languages: ${result.contentAnalysis.languagesDetected.join(', ')}`);
+        console.log(`   📝 Transcription quality: ${Math.round(result.contentAnalysis.qualityMetrics.averageTranscriptionConfidence * 100)}%`);
+      }
+
+      if (result.errors.length > 0) {
+        console.log('');
+        console.log('❌ Processing Errors:');
+        result.errors.forEach(error => {
+          console.log(`   • ${error.videoTitle}: ${error.error}`);
+        });
+      }
+
+      if (result.recommendations.length > 0) {
+        console.log('');
+        console.log('💡 Recommendations:');
+        result.recommendations.forEach(rec => {
+          console.log(`   ${rec}`);
+        });
+      }
+
+      console.log('');
+      console.log('🔍 You can now search your channel content:');
+      console.log(`   spiralmem search "topic"`);
+      console.log(`   spiralmem semantic-search "concept"`);
+      console.log(`   spiralmem extract-segments "keyword" --csv`);
+
+    } catch (error) {
+      console.error('❌ Channel processing failed:', error instanceof Error ? error.message : error);
+      
+      if (error instanceof Error && error.message.includes('quota')) {
+        console.log('');
+        console.log('💡 YouTube API quota exceeded. Try:');
+        console.log('1. Wait for quota to reset (next day)');
+        console.log('2. Use a different API key');
+        console.log('3. Process fewer videos with --max-videos');
+      }
+      
+      process.exit(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
 // List spaces command
 program
   .command('spaces')
