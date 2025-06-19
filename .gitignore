@@ -19,10 +19,12 @@ temp/
 tmp/
 *.tmp
 
-# Environment files
+# Environment files  
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
 
 # IDE files
 .vscode/
