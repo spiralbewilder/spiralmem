@@ -41,6 +41,8 @@ export interface VideoWorkflowOptions {
   audioFirstMode?: boolean; // New: Enable audio-first processing for faster results
   fastAudioExtraction?: boolean; // New: Use fast audio settings (less quality, more speed)
   customTitle?: string; // New: Custom title for the memory (useful for YouTube videos)
+  videoDescription?: string; // New: Video description for enhanced search (useful for speaker identification)
+  youtubeMetadata?: any; // New: Full YouTube metadata including description, tags, etc.
   cleanupVideoAfterProcessing?: boolean; // New: Delete video file after processing to save storage
   keepAudioFiles?: boolean; // New: Keep extracted audio files for future use
 }
@@ -470,6 +472,8 @@ export class VideoWorkflow {
       audioFirstMode: true, // Enable audio-first by default for better performance
       fastAudioExtraction: true, // Use fast audio extraction by default
       customTitle: '', // Default to empty, will use filename if not provided
+      videoDescription: '', // Default to empty, enhanced search when available
+      youtubeMetadata: {}, // Default to empty object, populated for YouTube videos
       cleanupVideoAfterProcessing: true, // Delete video files by default to save storage
       keepAudioFiles: true, // Keep audio files for future use
       ...options
@@ -515,13 +519,19 @@ export class VideoWorkflow {
     options: Required<VideoWorkflowOptions>
   ): Promise<string | null> {
     try {
+      // Create enhanced content for search - combine transcript with description for better speaker identification
+      const searchableContent = [
+        options.videoDescription ? `Description: ${options.videoDescription}` : '',
+        transcriptData?.full_text || 'Video content'
+      ].filter(Boolean).join('\n\n');
+
       // Create memory record
       const memory: Omit<Memory, 'createdAt' | 'updatedAt'> = {
         id: `memory-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         spaceId,
         contentType: 'video',
         title: options.customTitle || path.basename(videoPath),
-        content: transcriptData?.full_text || 'Video content',
+        content: searchableContent,
         source: videoPath,
         filePath: videoPath,
         metadata: {
@@ -529,7 +539,12 @@ export class VideoWorkflow {
           format: metadata?.format || 'unknown',
           resolution: metadata?.resolution || { width: 0, height: 0 },
           processingJobId: jobId,
-          originalTitle: options.customTitle ? path.basename(videoPath) : undefined
+          originalTitle: options.customTitle ? path.basename(videoPath) : undefined,
+          // Enhanced metadata for speaker identification
+          description: options.videoDescription || '',
+          youtubeMetadata: options.youtubeMetadata || {},
+          hasDescription: !!(options.videoDescription && options.videoDescription.length > 0),
+          transcriptLanguage: transcriptData?.language || 'unknown'
         }
       };
 

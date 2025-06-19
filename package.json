@@ -1,7 +1,7 @@
 {
   "name": "spiralmem",
   "version": "1.0.0",
-  "description": "Local supermemory.ai implementation with video processing and MCP server integration",
+  "description": "Transform videos into searchable, organized memories using local AI transcription",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -29,16 +29,27 @@
     "demo:proof": "tsx src/demo/demo-complete-proof.ts"
   },
   "keywords": [
+    "video",
     "memory",
     "ai",
-    "video",
+    "transcription",
     "search",
-    "mcp",
+    "youtube",
+    "whisper",
     "local",
-    "privacy"
+    "privacy",
+    "mcp"
   ],
   "author": "spiralbewilder",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spiralbewilder/spiralmem.git"
+  },
+  "homepage": "https://github.com/spiralbewilder/spiralmem#readme",
+  "bugs": {
+    "url": "https://github.com/spiralbewilder/spiralmem/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@xenova/transformers": "^2.8.0",

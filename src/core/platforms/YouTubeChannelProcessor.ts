@@ -4,6 +4,7 @@ import { BatchProcessor } from '../performance/BatchProcessor.js';
 import { VideoWorkflow } from '../workflow/VideoWorkflow.js';
 import { PlatformVideoRepository } from '../database/repositories/PlatformVideoRepository.js';
 import { PerformanceMonitor } from './PerformanceMonitor.js';
+import { YouTubeDownloader } from '../video/YouTubeDownloader.js';
 
 export interface YouTubeChannelProcessingOptions {
   maxVideos?: number; // Limit number of videos to process
@@ -124,6 +125,7 @@ export class YouTubeChannelProcessor {
   private videoWorkflow: VideoWorkflow;
   private platformVideoRepo: PlatformVideoRepository;
   private performanceMonitor: PerformanceMonitor;
+  private youtubeDownloader: YouTubeDownloader;
 
   constructor() {
     this.youtubeConnector = new YouTubeConnector();
@@ -131,6 +133,17 @@ export class YouTubeChannelProcessor {
     this.videoWorkflow = new VideoWorkflow();
     this.platformVideoRepo = new PlatformVideoRepository();
     this.performanceMonitor = new PerformanceMonitor();
+    this.youtubeDownloader = new YouTubeDownloader();
+  }
+
+  /**
+   * Initialize the channel processor and all dependencies
+   */
+  async initialize(): Promise<void> {
+    // Initialize database connection
+    const { DatabaseConnection } = await import('../database/connection.js');
+    const dbConnection = DatabaseConnection.getInstance();
+    await dbConnection.initialize();
   }
 
   /**
@@ -446,15 +459,8 @@ export class YouTubeChannelProcessor {
           progressCallback(currentProgress);
         }
 
-        // Process individual video
-        return await this.videoWorkflow.processVideo(video.videoId, 'channel-batch', {
-          enableTranscription: processingOptions.enableTranscripts !== false,
-          enableFrameSampling: processingOptions.enableFrameExtraction || false,
-          chunkingOptions: {
-            chunkSize: 2000, // Larger chunks for channel processing
-            overlapSize: 200
-          }
-        });
+        // Process individual video: download then process
+        return await this.processChannelVideo(video, processingOptions, progressCallback);
       },
       {
         batchSize: processingOptions.batchSize || 3,
@@ -489,6 +495,10 @@ export class YouTubeChannelProcessor {
     for (const pattern of patterns) {
       const match = channelUrl.match(pattern);
       if (match) {
+        // For @ handles, return the full URL since we need to use it with yt-dlp
+        if (channelUrl.includes('/@')) {
+          return channelUrl;
+        }
         return match[1];
       }
     }
@@ -496,7 +506,17 @@ export class YouTubeChannelProcessor {
     return null;
   }
 
-  private parseDuration(duration: string): number {
+  private parseDuration(duration: string | number): number {
+    // Handle numeric duration (already in seconds)
+    if (typeof duration === 'number') {
+      return duration;
+    }
+    
+    // Handle string duration
+    if (typeof duration !== 'string') {
+      return 0;
+    }
+    
     // Parse ISO 8601 duration (PT1H2M3S) to seconds
     const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
     if (!match) return 0;
@@ -620,5 +640,66 @@ export class YouTubeChannelProcessor {
         errorRate: batchProgress.failedItems / (batchProgress.successfulItems + batchProgress.failedItems)
       }
     };
+  }
+
+  /**
+   * Process a single channel video: download, then run through video workflow
+   */
+  private async processChannelVideo(
+    video: any, 
+    processingOptions: any, 
+    progressCallback?: (progress: any) => void
+  ): Promise<any> {
+    const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+    
+    try {
+      // Step 1: Download the video  
+      // Note: Progress callback is handled by batch processor, not individual video processor
+
+      const downloadResult = await this.youtubeDownloader.downloadVideo(videoUrl, {
+        outputDirectory: './temp/channel-downloads',
+        format: 'mp4',
+        quality: '720p',
+        maxFileSize: '500M',
+        maxDuration: processingOptions.maxDuration || 3600
+      });
+
+      if (!downloadResult.success) {
+        throw new Error(`Download failed: ${downloadResult.errors.join(', ')}`);
+      }
+
+      // Step 2: Process the downloaded video
+
+      const workflowResult = await this.videoWorkflow.processVideo(
+        downloadResult.downloadedFile!,
+        'channel-batch',
+        {
+          enableTranscription: processingOptions.enableTranscripts !== false,
+          enableFrameSampling: processingOptions.enableFrameExtraction || false,
+          customTitle: video.title,
+          videoDescription: video.description || '', // Include description for speaker identification
+          youtubeMetadata: {
+            videoId: video.videoId,
+            channelId: video.channelId,
+            channelTitle: video.channelTitle,
+            publishedAt: video.publishedAt,
+            duration: video.duration
+          },
+          cleanupVideoAfterProcessing: true, // Save disk space
+          chunkingOptions: {
+            chunkSize: 2000,
+            overlapSize: 200
+          }
+        }
+      );
+
+      // Processing completed successfully
+
+      return workflowResult;
+
+    } catch (error) {
+      logger.error(`Failed to process channel video ${video.videoId}:`, error);
+      throw error;
+    }
   }
 }

@@ -99,6 +99,8 @@ program
       
       let actualVideoPath = videoPath;
       let suggestedTitle = options.title;
+      let videoDescription = '';
+      let youtubeMetadata = {};
 
       if (isYouTubeUrl) {
         if (!program.opts().quiet) {
@@ -123,10 +125,24 @@ program
 
           actualVideoPath = downloadResult.downloadedFile!;
           suggestedTitle = suggestedTitle || downloadResult.suggestedTitle;
+          
+          // Extract description for enhanced search and speaker identification
+          videoDescription = downloadResult.videoInfo?.description || '';
+          youtubeMetadata = downloadResult.videoInfo ? {
+            videoId: downloadResult.videoInfo.id,
+            uploader: downloadResult.videoInfo.uploader,
+            uploadDate: downloadResult.videoInfo.uploadDate,
+            duration: downloadResult.videoInfo.duration,
+            viewCount: downloadResult.videoInfo.viewCount,
+            url: downloadResult.videoInfo.url
+          } : {};
 
           if (!program.opts().quiet) {
             console.log(`✅ Downloaded: ${downloadResult.videoInfo?.title}`);
             console.log(`📁 Saved to: ${actualVideoPath}`);
+            if (videoDescription.length > 0) {
+              console.log(`📝 Description: ${videoDescription.substring(0, 100)}...`);
+            }
           }
 
         } catch (error) {
@@ -151,6 +167,8 @@ program
       const result = await workflow.processVideo(actualVideoPath, options.space, {
         enableTranscription: options.transcription,
         customTitle: suggestedTitle, // Use YouTube title if available
+        videoDescription: isYouTubeUrl ? videoDescription : '', // Include description for speaker identification
+        youtubeMetadata: isYouTubeUrl ? youtubeMetadata : {},
         cleanupVideoAfterProcessing: !options.keepVideo, // Delete video unless --keep-video specified
         keepAudioFiles: options.keepAudio !== false // Keep audio unless --no-keep-audio specified
       });
@@ -691,6 +709,7 @@ program
       // Import the channel processor
       const { YouTubeChannelProcessor } = await import('../core/platforms/YouTubeChannelProcessor.js');
       const channelProcessor = new YouTubeChannelProcessor();
+      await channelProcessor.initialize();
 
       // Configure processing options
       const processingOptions = {

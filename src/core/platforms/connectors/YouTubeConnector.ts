@@ -13,6 +13,9 @@ import {
 } from '../../models/types.js';
 import { ErrorRecoveryManager, ErrorContext } from '../ErrorRecovery.js';
 import { PerformanceMonitor } from '../PerformanceMonitor.js';
+import { logger } from '../../../utils/logger.js';
+import { spawn } from 'child_process';
+import path from 'path';
 
 /**
  * YouTube platform connector implementation
@@ -646,25 +649,334 @@ export class YouTubeConnector extends PlatformConnector {
    * Get channel information
    */
   async getChannelInfo(channelId: string): Promise<any> {
-    // TODO: Implement channel info retrieval
-    return {
-      id: channelId,
-      title: 'Channel Title',
-      subscriberCount: 0,
-      videoCount: 0,
-      description: 'Channel description'
-    };
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    
+    if (apiKey) {
+      try {
+        const url = `${this.baseUrl}/channels?part=snippet,statistics&id=${channelId}&key=${apiKey}`;
+        const response = await fetch(url);
+        
+        if (response.ok) {
+          const data = await response.json() as any;
+          if (data.items && data.items.length > 0) {
+            const item = data.items[0];
+            const snippet = item.snippet;
+            const statistics = item.statistics;
+            
+            return {
+              id: channelId,
+              title: snippet.title,
+              description: snippet.description || '',
+              subscriberCount: parseInt(statistics.subscriberCount || '0'),
+              videoCount: parseInt(statistics.videoCount || '0'),
+              viewCount: parseInt(statistics.viewCount || '0'),
+              customUrl: snippet.customUrl,
+              thumbnails: snippet.thumbnails
+            };
+          }
+        }
+      } catch (error) {
+        logger.warn(`YouTube API channel info failed, using yt-dlp fallback:`, error);
+      }
+    }
+    
+    // Fallback: Use yt-dlp to extract channel info
+    try {
+      // Handle both channel IDs and full URLs
+      const channelUrl = channelId.startsWith('http') ? channelId : `https://www.youtube.com/channel/${channelId}`;
+      const info = await this.extractChannelInfoWithYtDlp(channelUrl);
+      return {
+        id: channelId,
+        title: info.title || 'Channel Title',
+        description: info.description || '',
+        subscriberCount: info.subscriberCount || 0,
+        videoCount: info.videoCount || 0,
+        viewCount: info.viewCount || 0
+      };
+    } catch (error) {
+      logger.warn(`Channel info extraction failed:`, error);
+      return {
+        id: channelId,
+        title: 'Channel Title',
+        subscriberCount: 0,
+        videoCount: 0,
+        description: 'Channel description'
+      };
+    }
   }
 
   /**
    * Get videos from a channel
    */
   async getChannelVideos(channelId: string, options?: any): Promise<any> {
-    // TODO: Implement channel videos retrieval  
-    return {
-      videos: [],
-      nextPageToken: null,
-      totalResults: 0
-    };
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    const maxResults = options?.maxResults || 50;
+    const order = options?.order || 'date';
+    const pageToken = options?.pageToken;
+    
+    if (apiKey) {
+      try {
+        let url = `${this.baseUrl}/search?part=id,snippet&channelId=${channelId}&type=video&maxResults=${maxResults}&order=${order}&key=${apiKey}`;
+        if (pageToken) {
+          url += `&pageToken=${pageToken}`;
+        }
+        
+        const response = await fetch(url);
+        if (response.ok) {
+          const data = await response.json() as any;
+          
+          const videos = data.items?.map((item: any) => ({
+            videoId: item.id.videoId,
+            title: item.snippet.title,
+            description: item.snippet.description,
+            publishedAt: item.snippet.publishedAt,
+            thumbnails: item.snippet.thumbnails,
+            channelId: item.snippet.channelId,
+            channelTitle: item.snippet.channelTitle
+          })) || [];
+          
+          return {
+            videos,
+            nextPageToken: data.nextPageToken || null,
+            totalResults: data.pageInfo?.totalResults || videos.length
+          };
+        }
+      } catch (error) {
+        logger.warn(`YouTube API channel videos failed, using yt-dlp fallback:`, error);
+      }
+    }
+    
+    // Fallback: Use yt-dlp to extract channel videos
+    try {
+      // Handle both channel IDs and full URLs
+      const channelUrl = channelId.startsWith('http') ? channelId : `https://www.youtube.com/channel/${channelId}`;
+      const videos = await this.extractChannelVideosWithYtDlp(channelUrl, maxResults);
+      return {
+        videos,
+        nextPageToken: null,
+        totalResults: videos.length
+      };
+    } catch (error) {
+      logger.warn(`Channel videos extraction failed:`, error);
+      return {
+        videos: [],
+        nextPageToken: null,
+        totalResults: 0
+      };
+    }
+  }
+
+  /**
+   * Extract channel info using yt-dlp
+   */
+  private async extractChannelInfoWithYtDlp(channelUrl: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const YT_DLP_PATH: string = process.env.SPIRALMEM_INSTALL_DIR 
+        ? path.join(process.env.SPIRALMEM_INSTALL_DIR, 'venv', 'bin', 'yt-dlp')
+        : 'yt-dlp';
+
+      const ytDlpProcess = spawn(YT_DLP_PATH, [
+        '--dump-json',
+        '--no-download',
+        '--no-warnings',
+        '--playlist-end', '1', // Just get channel info, not videos
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        '--referer', 'https://www.youtube.com/',
+        channelUrl
+      ]);
+
+      let output = '';
+      let errorOutput = '';
+
+      ytDlpProcess.stdout.on('data', (data: any) => {
+        output += data.toString();
+      });
+
+      ytDlpProcess.stderr.on('data', (data: any) => {
+        errorOutput += data.toString();
+      });
+
+      ytDlpProcess.on('close', (code: number) => {
+        if (code !== 0) {
+          reject(new Error(`yt-dlp channel info failed: ${errorOutput}`));
+          return;
+        }
+
+        try {
+          const lines = output.trim().split('\n');
+          const info = JSON.parse(lines[0]);
+          resolve({
+            title: info.uploader || info.channel || 'Unknown Channel',
+            description: info.description || '',
+            subscriberCount: info.subscriber_count || 0,
+            videoCount: info.video_count || 0,
+            viewCount: info.view_count || 0
+          });
+        } catch (parseError) {
+          reject(new Error(`Failed to parse channel info: ${parseError}`));
+        }
+      });
+
+      ytDlpProcess.on('error', (error: any) => {
+        reject(new Error(`Failed to run yt-dlp: ${error.message}`));
+      });
+    });
+  }
+
+  /**
+   * Extract channel videos using yt-dlp with fast discovery
+   */
+  private async extractChannelVideosWithYtDlp(channelUrl: string, maxResults: number): Promise<any[]> {
+    // First: Fast discovery using --extract-flat
+    const fastVideos = await this.extractChannelVideosFlat(channelUrl, maxResults * 3); // Get more for filtering
+    
+    // Second: Get full metadata only for videos that might pass filtering
+    const fullVideos = await this.extractDetailedVideoInfo(fastVideos.slice(0, maxResults * 2));
+    
+    return fullVideos;
+  }
+
+  /**
+   * Fast channel video discovery using --extract-flat
+   */
+  private async extractChannelVideosFlat(channelUrl: string, maxResults: number): Promise<{id: string, title: string}[]> {
+    return new Promise((resolve, reject) => {
+      const YT_DLP_PATH: string = process.env.SPIRALMEM_INSTALL_DIR 
+        ? path.join(process.env.SPIRALMEM_INSTALL_DIR, 'venv', 'bin', 'yt-dlp')
+        : 'yt-dlp';
+
+      const ytDlpProcess = spawn(YT_DLP_PATH, [
+        '--flat-playlist',
+        '--dump-json',
+        '--no-download',
+        '--no-warnings',
+        '--playlist-end', maxResults.toString(),
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        '--referer', 'https://www.youtube.com/',
+        channelUrl
+      ]);
+
+      let output = '';
+      let errorOutput = '';
+
+      ytDlpProcess.stdout.on('data', (data: any) => {
+        output += data.toString();
+      });
+
+      ytDlpProcess.stderr.on('data', (data: any) => {
+        errorOutput += data.toString();
+      });
+
+      ytDlpProcess.on('close', (code: number) => {
+        if (code !== 0) {
+          reject(new Error(`yt-dlp flat extraction failed: ${errorOutput}`));
+          return;
+        }
+
+        try {
+          const lines = output.trim().split('\n').filter(line => line.trim());
+          const videos = lines.map(line => {
+            const info = JSON.parse(line);
+            return {
+              id: info.id,
+              title: info.title || 'Unknown Title'
+            };
+          }).filter(v => v.id); // Only keep videos with valid IDs
+          
+          logger.info(`Fast discovery found ${videos.length} videos from channel`);
+          resolve(videos);
+        } catch (parseError) {
+          reject(new Error(`Failed to parse flat channel data: ${parseError}`));
+        }
+      });
+
+      ytDlpProcess.on('error', (error: any) => {
+        reject(new Error(`Failed to run yt-dlp flat extraction: ${error.message}`));
+      });
+    });
+  }
+
+  /**
+   * Get detailed info for specific videos
+   */
+  private async extractDetailedVideoInfo(videos: {id: string, title: string}[]): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const YT_DLP_PATH: string = process.env.SPIRALMEM_INSTALL_DIR 
+        ? path.join(process.env.SPIRALMEM_INSTALL_DIR, 'venv', 'bin', 'yt-dlp')
+        : 'yt-dlp';
+
+      // Build URLs for selected videos
+      const videoUrls = videos.map(v => `https://www.youtube.com/watch?v=${v.id}`);
+      
+      const ytDlpProcess = spawn(YT_DLP_PATH, [
+        '--dump-json',
+        '--no-download',
+        '--no-warnings',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        '--referer', 'https://www.youtube.com/',
+        ...videoUrls
+      ]);
+
+      let output = '';
+      let errorOutput = '';
+
+      ytDlpProcess.stdout.on('data', (data: any) => {
+        output += data.toString();
+      });
+
+      ytDlpProcess.stderr.on('data', (data: any) => {
+        errorOutput += data.toString();
+      });
+
+      ytDlpProcess.on('close', (code: number) => {
+        if (code !== 0) {
+          logger.warn(`Some videos failed detailed extraction: ${errorOutput}`);
+          // Don't reject, just return what we got
+        }
+
+        try {
+          const lines = output.trim().split('\n').filter(line => line.trim());
+          const videos = lines.map(line => {
+            try {
+              const info = JSON.parse(line);
+              return {
+                videoId: info.id,
+                title: info.title || 'Unknown Title',
+                description: info.description || '',
+                publishedAt: info.upload_date ? this.formatUploadDate(info.upload_date) : new Date().toISOString(),
+                duration: info.duration || 0,
+                channelId: info.channel_id || '',
+                channelTitle: info.uploader || info.channel || 'Unknown Channel'
+              };
+            } catch (e) {
+              logger.warn(`Failed to parse video info: ${line.substring(0, 100)}...`);
+              return null;
+            }
+          }).filter(v => v !== null);
+          
+          logger.info(`Extracted detailed info for ${videos.length} videos`);
+          resolve(videos);
+        } catch (parseError) {
+          reject(new Error(`Failed to parse detailed video info: ${parseError}`));
+        }
+      });
+
+      ytDlpProcess.on('error', (error: any) => {
+        reject(new Error(`Failed to run yt-dlp for detailed info: ${error.message}`));
+      });
+    });
+  }
+
+  /**
+   * Format upload date from yt-dlp format (YYYYMMDD) to ISO string
+   */
+  private formatUploadDate(uploadDate: string): string {
+    if (uploadDate.length === 8) {
+      const year = uploadDate.substring(0, 4);
+      const month = uploadDate.substring(4, 6);
+      const day = uploadDate.substring(6, 8);
+      return new Date(`${year}-${month}-${day}`).toISOString();
+    }
+    return new Date().toISOString();
   }
 }

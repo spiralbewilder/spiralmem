@@ -1,334 +1,158 @@
 # Getting Started with Spiralmem
 
-Welcome to Spiralmem! This guide will walk you through your first steps with the local video memory system.
+Quick setup guide to get Spiralmem running on your machine.
 
-## Installation
+## Install
 
-### One-Command Install (Recommended)
+**One command - all platforms:**
 
-**Unix/Linux/macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | sh
-```
+# Unix/Linux/macOS
+curl -fsSL https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.sh | bash
 
-**Windows (PowerShell):**
-```powershell
+# Windows (PowerShell as Administrator)
 iwr -useb https://raw.githubusercontent.com/spiralbewilder/spiralmem/master/install.ps1 | iex
 ```
 
-The installer will:
-- ✅ Check your system requirements
-- ✅ Install missing dependencies (Node.js, Python, FFmpeg)
-- ✅ Download and set up Spiralmem
-- ✅ Verify everything is working
-- ✅ Add `spiralmem` command to your PATH
+The installer:
+- Checks system requirements
+- Installs missing dependencies (Node.js, Python, FFmpeg)
+- Downloads and builds Spiralmem
+- Adds `spiralmem` command to your PATH
 
-### Manual Install
-If you prefer to install manually, see the detailed instructions in the [README](README.md#-manual-installation).
+## Verify Installation
 
-## First Steps
-
-### 1. Verify Installation
 ```bash
 spiralmem check
 ```
 
-You should see all green checkmarks ✅. If not, the command will tell you what's missing.
+Should show all green checkmarks ✅.
 
-### 2. Optional: Configure Environment
-> **🎯 Quick Note**: This step is **completely optional**! Spiralmem works perfectly without any configuration.
+## First Steps
 
-If you want to customize settings or enable advanced features:
-
-```bash
-# Navigate to your installation directory
-cd ~/.spiralmem
-
-# Create your personal configuration from the template
-cp .env.example .env
-
-# Edit if you want to customize (optional)
-nano .env
-```
-
-**What's in the environment file?**
-- **YouTube API Key**: Only needed for advanced YouTube features (most users don't need this)
-- **Database paths**: Already set to sensible defaults
-- **Logging settings**: Pre-configured for optimal experience
-- **MCP server settings**: Already enabled for AI assistant integration
-
-**When do you need to configure this?**
-- ✅ **Never** - for basic video processing and YouTube downloads
-- ⚙️ **Maybe** - if you want custom database locations or specific logging levels
-- 🔑 **Rarely** - if you need advanced YouTube API features (channel management, quotas)
-
-> **💡 Pro Tip**: You can always configure this later! Start using Spiralmem immediately and configure only if you need specific customizations.
-
-### 3. Initialize the System
+### 1. Initialize System
 ```bash
 spiralmem init
 ```
 
-This creates:
-- Database (`~/.spiralmem/data/spiralmem.db`)
-- Configuration files
-- Temp directories for processing
-- Default memory space
+### 2. Process Your First Video
 
-### 4. Add Your First Video
-
+**Local video file:**
 ```bash
-# Add a video file
 spiralmem add-video /path/to/your/video.mp4
-
-# Add with custom title
-spiralmem add-video /path/to/video.mp4 --title "My Important Meeting"
-
-# Add to specific space
-spiralmem add-video /path/to/video.mp4 --space "work-meetings"
 ```
 
-**What happens during video processing:**
-1. ✅ File validation (format, size, accessibility)
-2. ✅ Metadata extraction (duration, resolution, etc.)
-3. ✅ Audio extraction using FFmpeg
-4. ✅ Speech-to-text transcription with faster_whisper
-5. ✅ Content chunking for search
-6. ✅ Database storage with full-text search indexing
-
-**Processing time**: ~20 seconds for a 5-minute video.
-
-### 4. Search Your Content
-
+**YouTube video:**
 ```bash
-# Basic search
-spiralmem search "machine learning"
-
-# Search in specific space
-spiralmem search "budget" --space "work-meetings"
-
-# Limit results
-spiralmem search "project" --limit 5
-
-# JSON output (for scripts)
-spiralmem search "data" --json
+spiralmem add-video https://youtu.be/dQw4w9WgXcQ
 ```
 
-### 5. Organize with Spaces
-
+**YouTube channel:**
 ```bash
-# List all spaces
-spiralmem spaces
-
-# Create new space
-spiralmem create-space "personal-videos" --description "Personal video collection"
-
-# Create work space
-spiralmem create-space "work-meetings" --description "Work meeting recordings"
-
-# Move video to specific space (during add)
-spiralmem add-video meeting.mp4 --space "work-meetings"
+spiralmem add-channel "https://www.youtube.com/@TechLead" --max-videos 3
 ```
 
-## Working with AI Assistants
-
-### Start MCP Server
+### 3. Search Content
 ```bash
-spiralmem serve-mcp
+spiralmem search "keyword"
 ```
 
-This starts a Model Context Protocol server that Claude and other AI assistants can connect to.
-
-**Available MCP Tools:**
-- Search across all your video transcripts
-- Get system statistics
-- List spaces and content
-- Export data in various formats
-
-### Connect Claude
-1. Start the MCP server: `spiralmem serve-mcp`
-2. In Claude, connect to `http://localhost:8080`
-3. Claude can now search your video library!
-
-**Example Claude interactions:**
-- "Search my videos for discussions about machine learning"
-- "What did I say about the quarterly budget in my meeting videos?"
-- "Find all videos where I mentioned 'project timeline'"
-
-## Common Workflows
-
-### Meeting Recordings
+### 4. View System Status
 ```bash
-# Create a space for meetings
-spiralmem create-space "meetings" --description "Meeting recordings"
-
-# Add meeting video
-spiralmem add-video zoom-meeting-2024-01-15.mp4 \
-  --space "meetings" \
-  --title "Q1 Planning Meeting"
-
-# Search for specific topics discussed
-spiralmem search "action items" --space "meetings"
-spiralmem search "budget allocation" --space "meetings"
-```
-
-### Learning Content
-```bash
-# Create learning space
-spiralmem create-space "learning" --description "Educational videos"
-
-# Add educational videos
-spiralmem add-video machine-learning-course-01.mp4 --space "learning"
-spiralmem add-video python-tutorial-advanced.mp4 --space "learning"
-
-# Search across all learning content
-spiralmem search "neural networks" --space "learning"
-spiralmem search "data preprocessing" --space "learning"
-```
-
-### Personal Video Library
-```bash
-# Create personal space
-spiralmem create-space "personal" --description "Personal videos"
-
-# Add family videos, travel vlogs, etc.
-spiralmem add-video family-vacation-2024.mp4 --space "personal"
-spiralmem add-video cooking-recipe-pasta.mp4 --space "personal"
-
-# Search personal content
-spiralmem search "beach" --space "personal"
-spiralmem search "recipe ingredients" --space "personal"
-```
-
-## Advanced Features
-
-### System Monitoring
-```bash
-# Check system health
-spiralmem check
-
-# View detailed statistics
 spiralmem stats
-
-# View configuration
-spiralmem config
 ```
 
-### Data Management
+## Key Commands
+
+### Processing
+- `spiralmem add-video <path>` - Process local video
+- `spiralmem add-video <youtube-url>` - Process YouTube video  
+- `spiralmem add-channel <url>` - Process YouTube channel
+
+### Channel Options
+- `--max-videos 5` - Limit number of videos
+- `--max-duration 1800` - Max duration in seconds (30 minutes)
+- `--min-duration 60` - Min duration in seconds
+- `--include-shorts` - Include YouTube Shorts
+
+### Search & Organization
+- `spiralmem search "query"` - Search all content
+- `spiralmem spaces` - List spaces
+- `spiralmem create-space name` - Create new space
+
+### System
+- `spiralmem init` - Initialize system
+- `spiralmem check` - Health check
+- `spiralmem stats` - Show statistics
+
+## Examples
+
+**Process a tech channel (short videos only):**
 ```bash
-# Export all data
-spiralmem export backup.json
-
-# Export specific space
-spiralmem export work-backup.json --space "work-meetings"
-
-# Export as CSV
-spiralmem export data.csv --format csv
+spiralmem add-channel "https://www.youtube.com/@fireship" --max-videos 5 --max-duration 600
 ```
 
-### Configuration Customization
-
-Edit `~/.config/spiralmem/config.yaml` to customize:
-
-```yaml
-video:
-  processing:
-    maxFileSize: "10GB"        # Increase file size limit
-  whisper:
-    model: "medium"            # Use better transcription model
-
-performance:
-  processing:
-    maxConcurrentJobs: 4       # Process more videos simultaneously
-
-logging:
-  level: "debug"               # More detailed logs
+**Process a podcast channel:**
+```bash
+spiralmem add-channel "https://www.youtube.com/@lexfridman" --max-videos 2 --max-duration 7200
 ```
+
+**Search for specific topics:**
+```bash
+spiralmem search "artificial intelligence"
+spiralmem search "javascript"
+```
+
+## Configuration (Optional)
+
+Spiralmem works without configuration. For advanced options:
+
+```bash
+# Navigate to install directory
+cd ~/.spiralmem
+
+# Create config from template
+cp .env.example .env
+
+# Edit if needed
+nano .env
+```
+
+Available options:
+- `YOUTUBE_API_KEY` - For advanced YouTube features (optional)
+- `SPIRALMEM_LOG_LEVEL` - Logging verbosity (info, debug, error)
 
 ## Troubleshooting
 
-### Video Won't Process
+**Installation Issues:**
 ```bash
-# Check if file is supported
-spiralmem add-video problematic-file.mov
-
-# Common issues:
-# - File too large (check config.yaml maxFileSize)
-# - Unsupported format (supported: mp4, avi, mov, mkv, webm)
-# - File corrupted or inaccessible
-# - Insufficient disk space
-```
-
-### Transcription Failed
-```bash
-# Check faster_whisper installation
-python3 -c "import faster_whisper; print('OK')"
-
-# Reinstall if needed
-pip3 install --upgrade faster_whisper
-
-# Check system resources
-spiralmem check
-```
-
-### Search Returns No Results
-```bash
-# Verify video was processed successfully
-spiralmem stats
-
-# Check if content is in expected space
-spiralmem spaces
-
-# Try broader search terms
-spiralmem search "the"  # Should return many results if content exists
-```
-
-### Performance Issues
-```bash
-# Check system health
+# Check system dependencies
 spiralmem check
 
-# View resource usage
-spiralmem stats
-
-# Common solutions:
-# - Increase memory limits in config.yaml
-# - Reduce maxConcurrentJobs
-# - Clean up temp files
-# - Check disk space
+# View detailed logs
+spiralmem --verbose check
 ```
 
-## Getting Help
+**Processing Issues:**
+- Ensure FFmpeg is installed: `ffmpeg -version`
+- Check Python packages: `pip list | grep whisper`
+- View logs: `tail -f ~/.spiralmem/logs/spiralmem.log`
 
-### Built-in Help
-```bash
-spiralmem --help           # Main help
-spiralmem add-video --help # Command-specific help
-spiralmem search --help    # Search options
-```
-
-### Log Files
-```bash
-# View recent logs
-tail -f ~/.local/share/spiralmem/logs/spiralmem.log
-
-# Search logs for errors
-grep ERROR ~/.local/share/spiralmem/logs/spiralmem.log
-```
-
-### System Information
-```bash
-# Comprehensive system check
-spiralmem check
-
-# Detailed system status
-spiralmem stats --json | jq .
-```
+**Performance:**
+- Processing time depends on video length and hardware
+- Channel discovery takes ~4 seconds
+- Video transcription takes ~30 seconds per 5-minute video
 
 ## Next Steps
 
-- Read the [System Architecture](SYSTEM_DESIGN_SPECIFICATION.md) for technical details
-- Check the [Roadmap](NEXT_STEPS_ROADMAP.md) for upcoming features
-- Explore the [Installer Design](INSTALLER_DESIGN.md) for deployment options
+1. **Process your video library** - Start with shorter videos for faster results
+2. **Try channel processing** - Find channels with content under 30 minutes
+3. **Explore search** - Search across all your processed content
+4. **Organize with spaces** - Create topic-based spaces for better organization
 
-Happy video memory building! 🎬✨
+## Need Help?
+
+- Run `spiralmem --help` for command reference
+- Check system status: `spiralmem check`
+- View logs: `~/.spiralmem/logs/spiralmem.log`
+- Report issues on GitHub
