@@ -700,8 +700,8 @@ program
           maxDuration: parseInt(options.maxDuration),
           includeShorts: options.includeShorts || false,
           includeLiveStreams: true,
-          keywordFilter: options.includeKeywords ? options.includeKeywords.split(',').map(k => k.trim()) : undefined,
-          excludeKeywords: options.excludeKeywords ? options.excludeKeywords.split(',').map(k => k.trim()) : undefined
+          keywordFilter: options.includeKeywords ? options.includeKeywords.split(',').map((k: string) => k.trim()) : undefined,
+          excludeKeywords: options.excludeKeywords ? options.excludeKeywords.split(',').map((k: string) => k.trim()) : undefined
         },
         processingOptions: {
           batchSize: 2, // Conservative for stability
@@ -711,7 +711,7 @@ program
           chunkingStrategy: 'content-based' as const
         },
         priorityMode: options.priority as any,
-        progressCallback: (progress) => {
+        progressCallback: (progress: any) => {
           // Show progress updates
           if (progress.currentVideo) {
             console.log(`🎬 Processing: ${progress.currentVideo.title}`);
