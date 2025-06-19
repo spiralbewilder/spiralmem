@@ -77,6 +77,8 @@ program
     } catch (error) {
       console.error('❌ Initialization failed:', error instanceof Error ? error.message : error);
       process.exit(1);
+    } finally {
+      await cleanup();
     }
   });
 
@@ -766,6 +768,8 @@ program
     } catch (error) {
       console.error('❌ Failed to get statistics:', error instanceof Error ? error.message : error);
       process.exit(1);
+    } finally {
+      await cleanup();
     }
   });
 
