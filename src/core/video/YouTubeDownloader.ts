@@ -4,6 +4,11 @@ import path from 'path';
 import { logger } from '../../utils/logger.js';
 import { PerformanceMonitor } from '../platforms/PerformanceMonitor.js';
 
+// Get the path to yt-dlp in the virtual environment
+const YT_DLP_PATH = process.env.SPIRALMEM_INSTALL_DIR 
+  ? path.join(process.env.SPIRALMEM_INSTALL_DIR, 'venv', 'bin', 'yt-dlp')
+  : 'yt-dlp'; // fallback to system yt-dlp
+
 export interface YouTubeDownloadOptions {
   outputDirectory?: string;
   format?: 'mp4' | 'webm' | 'mkv' | 'best';
@@ -316,7 +321,7 @@ export class YouTubeDownloader {
 
       logger.debug(`yt-dlp segment command: ${args.join(' ')}`);
 
-      const process = spawn('yt-dlp', args);
+      const process = spawn(YT_DLP_PATH, args);
       let stdout = '';
       let stderr = '';
 
@@ -353,7 +358,7 @@ export class YouTubeDownloader {
    */
   async extractVideoInfo(url: string): Promise<YouTubeVideoInfo> {
     return new Promise((resolve, reject) => {
-      const process = spawn('yt-dlp', [
+      const process = spawn(YT_DLP_PATH, [
         '--dump-json',
         '--no-download',
         '--no-warnings',
@@ -416,7 +421,7 @@ export class YouTubeDownloader {
    */
   async checkYtDlpAvailable(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const process = spawn('yt-dlp', ['--version']);
+      const process = spawn(YT_DLP_PATH, ['--version']);
       
       let version = '';
       process.stdout.on('data', (data: Buffer) => {
@@ -483,7 +488,7 @@ export class YouTubeDownloader {
 
       logger.debug(`Running yt-dlp with args: ${args.join(' ')}`);
 
-      const process = spawn('yt-dlp', args);
+      const process = spawn(YT_DLP_PATH, args);
       
       let downloadedFile = '';
       let errorOutput = '';
