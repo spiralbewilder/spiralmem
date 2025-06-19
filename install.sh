@@ -394,13 +394,26 @@ install_windows_dependencies() {
 install_python_packages() {
     log_info "Installing Python packages..."
     
+    # Create virtual environment for Python packages
+    local venv_dir="$INSTALL_DIR/venv"
+    
+    if [[ ! -d "$venv_dir" ]]; then
+        log_info "Creating Python virtual environment..."
+        python3 -m venv "$venv_dir"
+    fi
+    
+    # Activate virtual environment and install packages
+    source "$venv_dir/bin/activate"
+    
     # Install faster_whisper
     if ! python3 -c "import faster_whisper" 2>/dev/null; then
         log_info "Installing faster_whisper..."
-        pip3 install faster_whisper
+        pip install faster_whisper
     else
         log_info "faster_whisper already installed"
     fi
+    
+    deactivate
 }
 
 # Download and install Spiralmem
@@ -471,6 +484,11 @@ create_executable_script() {
 export SPIRALMEM_INSTALL_DIR="$INSTALL_DIR"
 export SPIRALMEM_CONFIG_DIR="$CONFIG_DIR"
 export SPIRALMEM_DATA_DIR="$DATA_DIR"
+
+# Activate Python virtual environment if it exists
+if [[ -f "$INSTALL_DIR/venv/bin/activate" ]]; then
+    source "$INSTALL_DIR/venv/bin/activate"
+fi
 
 # Change to installation directory
 cd "$INSTALL_DIR"
@@ -614,10 +632,17 @@ verify_installation() {
     fi
     
     # Test 5: Python packages
-    if python3 -c "import faster_whisper" 2>/dev/null; then
-        test_results+=("python-packages:PASS")
+    local venv_dir="$INSTALL_DIR/venv"
+    if [[ -f "$venv_dir/bin/activate" ]]; then
+        source "$venv_dir/bin/activate"
+        if python3 -c "import faster_whisper" 2>/dev/null; then
+            test_results+=("python-packages:PASS")
+        else
+            test_results+=("python-packages:FAIL")
+        fi
+        deactivate
     else
-        test_results+=("python-packages:FAIL")
+        test_results+=("python-packages:FAIL(no-venv)")
     fi
     
     # Report results
