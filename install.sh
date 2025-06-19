@@ -405,8 +405,8 @@ install_python_packages() {
     # Activate virtual environment and install packages
     source "$venv_dir/bin/activate"
     
-    # Install faster_whisper
-    if ! python3 -c "import faster_whisper" 2>/dev/null; then
+    # Install faster_whisper (always install in fresh venv or if missing)
+    if [[ ! -d "$venv_dir" ]] || ! "$venv_dir/bin/python" -c "import faster_whisper" 2>/dev/null; then
         log_info "Installing faster_whisper..."
         pip install faster_whisper
     else
@@ -633,14 +633,12 @@ verify_installation() {
     
     # Test 5: Python packages
     local venv_dir="$INSTALL_DIR/venv"
-    if [[ -f "$venv_dir/bin/activate" ]]; then
-        source "$venv_dir/bin/activate"
-        if python3 -c "import faster_whisper" 2>/dev/null; then
+    if [[ -f "$venv_dir/bin/python" ]]; then
+        if "$venv_dir/bin/python" -c "import faster_whisper" 2>/dev/null; then
             test_results+=("python-packages:PASS")
         else
             test_results+=("python-packages:FAIL")
         fi
-        deactivate
     else
         test_results+=("python-packages:FAIL(no-venv)")
     fi
