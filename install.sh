@@ -419,12 +419,25 @@ install_python_packages() {
         exit 1
     fi
     
-    # Install faster_whisper using virtual environment directly
-    if [[ ! -d "$venv_dir" ]] || ! "$venv_dir/bin/python" -c "import faster_whisper" 2>/dev/null; then
-        log_info "Installing faster_whisper..."
-        "$venv_dir/bin/pip" install faster_whisper
+    # Install Python packages using virtual environment directly
+    log_info "Installing Python packages (faster_whisper, yt-dlp)..."
+    
+    # Always install/upgrade to ensure we have latest versions
+    "$venv_dir/bin/pip" install faster_whisper yt-dlp
+    
+    # Verify installations
+    if "$venv_dir/bin/python" -c "import faster_whisper" 2>/dev/null; then
+        log_info "faster_whisper installation verified"
     else
-        log_info "faster_whisper already installed"
+        log_error "faster_whisper installation failed"
+        exit 1
+    fi
+    
+    if "$venv_dir/bin/python" -c "import yt_dlp" 2>/dev/null; then
+        log_info "yt-dlp installation verified"
+    else
+        log_error "yt-dlp installation failed"
+        exit 1
     fi
 }
 
@@ -649,8 +662,23 @@ verify_installation() {
     # Test 5: Python packages
     local venv_dir="$INSTALL_DIR/venv"
     if [[ -f "$venv_dir/bin/python" ]]; then
+        local faster_whisper_ok=false
+        local yt_dlp_ok=false
+        
         if "$venv_dir/bin/python" -c "import faster_whisper" 2>/dev/null; then
+            faster_whisper_ok=true
+        fi
+        
+        if "$venv_dir/bin/python" -c "import yt_dlp" 2>/dev/null; then
+            yt_dlp_ok=true
+        fi
+        
+        if $faster_whisper_ok && $yt_dlp_ok; then
             test_results+=("python-packages:PASS")
+        elif $faster_whisper_ok; then
+            test_results+=("python-packages:PARTIAL(missing-yt-dlp)")
+        elif $yt_dlp_ok; then
+            test_results+=("python-packages:PARTIAL(missing-faster-whisper)")
         else
             test_results+=("python-packages:FAIL")
         fi
