@@ -10,7 +10,7 @@ import {
   ExportData,
   SpaceSettings
 } from './models/types.js';
-import { database, SpaceRepository, MemoryRepository } from './database/index.js';
+import { database, SpaceRepository, MemoryRepository, ChunkRepository } from './database/index.js';
 import { logger, logError, logPerformance } from '../utils/logger.js';
 import { config } from '../utils/config.js';
 import { 
@@ -25,11 +25,13 @@ import { resourceMonitor } from '../utils/resourceMonitor.js';
 export class MemoryEngine {
   private spaceRepo: SpaceRepository;
   private memoryRepo: MemoryRepository;
+  private chunkRepo: ChunkRepository;
   private isInitialized = false;
 
   constructor() {
     this.spaceRepo = new SpaceRepository();
     this.memoryRepo = new MemoryRepository();
+    this.chunkRepo = new ChunkRepository();
   }
 
   async initialize(): Promise<void> {
@@ -199,13 +201,51 @@ export class MemoryEngine {
   }
 
   async semanticSearch(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
-    // For now, this is the same as regular search
-    // Will be enhanced with vector search when embeddings are implemented
-    return this.searchMemories({
-      query,
-      spaceId: options.searchMode === 'semantic' ? undefined : options.searchMode,
-      limit: options.maxResults,
-    });
+    this.ensureInitialized();
+    try {
+      const { VectorSearchEngine } = await import('./search/VectorSearchEngine.js');
+      const vectorEngine = new VectorSearchEngine();
+      
+      const vectorResults = await vectorEngine.search(query, {
+        model: 'all-MiniLM-L6-v2',
+        similarityThreshold: options.similarityThreshold || 0.6,
+        maxResults: options.maxResults || 10,
+        includeMetadata: true
+      });
+
+      // Convert vector results to SearchResult format
+      return vectorResults.results.map(vr => ({
+        memory: {
+          id: vr.metadata?.memoryId || vr.contentId,
+          spaceId: 'default', // Will be properly resolved from metadata
+          contentType: 'video' as const,
+          title: 'Semantic Match',
+          content: vr.content,
+          source: vr.metadata?.sourceId || '',
+          metadata: vr.metadata || {},
+          createdAt: new Date(),
+          updatedAt: new Date()
+        },
+        chunk: vr.contentType === 'chunk' ? {
+          id: vr.contentId,
+          memoryId: vr.metadata?.memoryId || '',
+          chunkText: vr.content,
+          chunkOrder: vr.metadata?.chunkIndex || 0,
+          startOffset: vr.metadata?.timestamp ? Math.floor(vr.metadata.timestamp * 1000) : undefined,
+          metadata: vr.metadata || {},
+          createdAt: new Date()
+        } : undefined,
+        similarity: vr.similarity,
+        highlights: [vr.content.substring(0, 100) + '...']
+      }));
+    } catch (error) {
+      logger.warn('Semantic search failed, falling back to keyword search:', error);
+      // Fallback to keyword search
+      return this.searchMemories({
+        query,
+        limit: options.maxResults,
+      });
+    }
   }
 
   async keywordSearch(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
@@ -213,6 +253,142 @@ export class MemoryEngine {
       query,
       limit: options.maxResults,
     });
+  }
+
+  /**
+   * Enhanced search with precise timestamps for spoken word matches
+   */
+  async searchWithTimestamps(query: string, options: {
+    spaceId?: string;
+    limit?: number;
+    contentTypes?: string[];
+  } = {}): Promise<SearchResult[]> {
+    this.ensureInitialized();
+    try {
+      const startTime = Date.now();
+      
+      // Validate space if specified
+      if (options.spaceId && !(await this.spaceRepo.exists(options.spaceId))) {
+        throw new Error(`Space '${options.spaceId}' does not exist`);
+      }
+
+      const searchQuery = {
+        query,
+        spaceId: options.spaceId,
+        limit: options.limit || 10,
+        contentTypes: options.contentTypes
+      };
+
+      const results = await this.memoryRepo.searchWithTimestamps(searchQuery);
+      
+      logPerformance(`Timestamp search: "${query}"`, startTime);
+      logger.info(`Timestamp search returned ${results.length} results with precise timing for: "${query}"`);
+      
+      return results;
+    } catch (error) {
+      logError(error as Error, 'searchWithTimestamps');
+      throw error;
+    }
+  }
+
+  /**
+   * Generate embeddings for existing content to enable semantic search
+   */
+  async generateEmbeddings(options: {
+    memoryIds?: string[];
+    forceRegenerate?: boolean;
+    batchSize?: number;
+  } = {}): Promise<{
+    success: boolean;
+    indexed: number;
+    failed: number;
+    errors: string[];
+  }> {
+    this.ensureInitialized();
+    try {
+      const { VectorSearchEngine } = await import('./search/VectorSearchEngine.js');
+      const vectorEngine = new VectorSearchEngine();
+      
+      // Get chunks to index
+      let chunks;
+      if (options.memoryIds) {
+        chunks = await this.chunkRepo.findByMemoryIds(options.memoryIds);
+      } else {
+        // Get all chunks by getting all spaces first
+        const spaces = await this.spaceRepo.findAll();
+        const allMemoryIds: string[] = [];
+        for (const space of spaces) {
+          const spaceMemories = await this.memoryRepo.findBySpace(space.id);
+          allMemoryIds.push(...spaceMemories.map((m: Memory) => m.id));
+        }
+        chunks = await this.chunkRepo.findByMemoryIds(allMemoryIds);
+      }
+
+      logger.info(`Starting embedding generation for ${chunks.length} chunks`);
+
+      // Filter out already indexed chunks if not forcing regeneration
+      let chunksToIndex = chunks;
+      if (!options.forceRegenerate) {
+        // This would require checking existing embeddings
+        // For now, index all chunks
+      }
+
+      // Prepare content for batch indexing
+      const indexItems = chunksToIndex.map(chunk => ({
+        content: chunk.chunkText,
+        contentId: chunk.id,
+        contentType: 'chunk' as const
+      }));
+
+      const result = await vectorEngine.indexContentBatch(indexItems, {
+        model: 'all-MiniLM-L6-v2',
+        batchSize: options.batchSize || 32
+      });
+
+      logger.info(`Embedding generation completed: ${result.successful} successful, ${result.failed} failed`);
+
+      return {
+        success: result.successful > 0,
+        indexed: result.successful,
+        failed: result.failed,
+        errors: result.failed > 0 ? [`${result.failed} embeddings failed to generate`] : []
+      };
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Embedding generation failed:', error);
+      return {
+        success: false,
+        indexed: 0,
+        failed: 0,
+        errors: [errorMsg]
+      };
+    }
+  }
+
+  /**
+   * Get vector search statistics
+   */
+  async getVectorStats(): Promise<{
+    totalEmbeddings: number;
+    embeddingsByType: Record<string, number>;
+    embeddingsByModel: Record<string, number>;
+    averageDimensions: number;
+  }> {
+    this.ensureInitialized();
+    try {
+      const { VectorSearchEngine } = await import('./search/VectorSearchEngine.js');
+      const vectorEngine = new VectorSearchEngine();
+      return await vectorEngine.getIndexStats();
+    } catch (error) {
+      logger.error('Failed to get vector stats:', error);
+      return {
+        totalEmbeddings: 0,
+        embeddingsByType: {},
+        embeddingsByModel: {},
+        averageDimensions: 0
+      };
+    }
   }
 
   // Space Management
@@ -290,8 +466,8 @@ export class MemoryEngine {
       // TODO: Implement actual storage calculation
       const storageUsed = 0;
       
-      // TODO: Implement chunk counting
-      const totalChunks = 0;
+      // Get actual chunk count
+      const totalChunks = await this.chunkRepo.count();
       
       // TODO: Implement recent activity tracking
       const recentActivity = {

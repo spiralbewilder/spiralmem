@@ -1,5 +1,5 @@
 import { BaseRepository } from './BaseRepository.js';
-import { Memory, ContentInput, SearchQuery, SearchResult } from '../../models/types.js';
+import { Memory, Chunk, ContentInput, SearchQuery, SearchResult } from '../../models/types.js';
 
 interface MemoryRow {
   id: string;
@@ -134,6 +134,111 @@ export class MemoryRepository extends BaseRepository {
       similarity: this.calculateSimilarity(row.content, query.query),
       highlights: this.extractHighlights(row.content, query.query),
     }));
+  }
+
+  /**
+   * Enhanced search that includes chunk-level search with precise timestamps
+   */
+  async searchWithTimestamps(query: SearchQuery): Promise<SearchResult[]> {
+    // First search in memories
+    const memoryResults = await this.search(query);
+    
+    // Then search in chunks for more precise results
+    let chunkSql = `
+      SELECT 
+        c.*,
+        m.id as memory_id,
+        m.space_id,
+        m.content_type,
+        m.title,
+        m.content as memory_content,
+        m.source,
+        m.file_path,
+        m.metadata as memory_metadata,
+        m.created_at as memory_created,
+        m.updated_at as memory_updated
+      FROM chunks c
+      JOIN memories m ON c.memory_id = m.id
+      WHERE c.chunk_text LIKE ?
+    `;
+    const params: any[] = [`%${query.query}%`];
+
+    if (query.spaceId) {
+      chunkSql += ' AND m.space_id = ?';
+      params.push(query.spaceId);
+    }
+
+    if (query.contentTypes && query.contentTypes.length > 0) {
+      const placeholders = query.contentTypes.map(() => '?').join(', ');
+      chunkSql += ` AND m.content_type IN (${placeholders})`;
+      params.push(...query.contentTypes);
+    }
+
+    chunkSql += ' ORDER BY c.start_offset ASC';
+    
+    if (query.limit) {
+      chunkSql += ' LIMIT ?';
+      params.push(query.limit);
+    }
+
+    const chunkRows = await this.db.all(chunkSql, ...params) as any[];
+    
+    const enhancedResults: SearchResult[] = [];
+    
+    // Process chunk results with timestamps
+    for (const row of chunkRows) {
+      const memory: Memory = {
+        id: row.memory_id,
+        spaceId: row.space_id,
+        contentType: row.content_type,
+        title: row.title,
+        content: row.memory_content,
+        source: row.source,
+        filePath: row.file_path,
+        metadata: this.deserializeJson(row.memory_metadata) as Record<string, any>,
+        createdAt: this.parseDate(row.memory_created),
+        updatedAt: this.parseDate(row.memory_updated),
+      };
+
+      const chunk: Chunk = {
+        id: row.id,
+        memoryId: row.memory_id,
+        chunkText: row.chunk_text,
+        chunkOrder: row.chunk_order,
+        startOffset: row.start_offset,
+        endOffset: row.end_offset,
+        metadata: this.deserializeJson(row.metadata) as Record<string, any>,
+        createdAt: this.parseDate(row.created_at),
+      };
+
+      // Calculate word-level matches within the chunk
+      const wordMatches = this.findWordMatches(row.chunk_text, query.query, row.start_offset, row.end_offset);
+
+      enhancedResults.push({
+        memory,
+        chunk,
+        similarity: this.calculateSimilarity(row.chunk_text, query.query),
+        highlights: this.extractHighlights(row.chunk_text, query.query),
+        timestamps: {
+          startMs: row.start_offset || 0,
+          endMs: row.end_offset || 0,
+          wordMatches
+        }
+      });
+    }
+
+    // Merge and deduplicate results, preferring chunk results when available
+    const allResults = [...enhancedResults];
+    
+    // Add memory results that don't have chunk matches
+    for (const memResult of memoryResults) {
+      const hasChunkMatch = enhancedResults.some(cr => cr.memory.id === memResult.memory.id);
+      if (!hasChunkMatch) {
+        allResults.push(memResult);
+      }
+    }
+
+    return allResults.slice(0, query.limit || 10);
   }
 
   async update(id: string, updates: Partial<Pick<Memory, 'title' | 'content' | 'metadata'>>): Promise<boolean> {
@@ -289,5 +394,90 @@ export class MemoryRepository extends BaseRepository {
     }
     
     return highlights.slice(0, 3); // Limit to 3 highlights
+  }
+
+  /**
+   * Find precise segments for word/phrase matches to enable video compilation
+   */
+  private findWordMatches(chunkText: string, query: string, startMs: number, endMs: number): Array<{
+    word: string;
+    startMs: number;
+    endMs: number;
+    matchIndex: number;
+  }> {
+    const queryLower = query.toLowerCase().trim();
+    const chunkLower = chunkText.toLowerCase();
+    const chunkWords = chunkText.split(/\s+/);
+    const totalWords = chunkWords.length;
+    const chunkDurationMs = endMs - startMs;
+    const msPerWord = totalWords > 0 ? chunkDurationMs / totalWords : 0;
+    
+    const matches: Array<{
+      word: string;
+      startMs: number;
+      endMs: number;
+      matchIndex: number;
+    }> = [];
+
+    // Handle multi-word phrases
+    if (queryLower.includes(' ')) {
+      const queryWords = queryLower.split(/\s+/);
+      const queryWordCount = queryWords.length;
+      
+      // Find phrase matches in the chunk
+      for (let i = 0; i <= chunkWords.length - queryWordCount; i++) {
+        const chunkPhrase = chunkWords.slice(i, i + queryWordCount).join(' ').toLowerCase();
+        
+        if (chunkPhrase.includes(queryLower) || this.phraseMatches(chunkPhrase, queryLower)) {
+          // Calculate timing for the entire phrase
+          const phraseStartMs = Math.round(startMs + (i * msPerWord));
+          const phraseEndMs = Math.round(phraseStartMs + (queryWordCount * msPerWord));
+          
+          matches.push({
+            word: query, // Keep original case/spacing for display
+            startMs: phraseStartMs,
+            endMs: phraseEndMs,
+            matchIndex: i
+          });
+        }
+      }
+    } else {
+      // Handle single word matches
+      for (let i = 0; i < chunkWords.length; i++) {
+        const chunkWord = chunkWords[i].toLowerCase().replace(/[^\w]/g, '');
+        
+        if (chunkWord === queryLower || chunkWord.includes(queryLower)) {
+          // Add buffer around the word for natural speech flow
+          const bufferWords = 1; // Include 1 word before/after for context
+          const segmentStart = Math.max(0, i - bufferWords);
+          const segmentEnd = Math.min(chunkWords.length - 1, i + bufferWords);
+          const segmentWordCount = segmentEnd - segmentStart + 1;
+          
+          const segmentStartMs = Math.round(startMs + (segmentStart * msPerWord));
+          const segmentEndMs = Math.round(segmentStartMs + (segmentWordCount * msPerWord));
+          
+          matches.push({
+            word: chunkWords.slice(segmentStart, segmentEnd + 1).join(' '), // Include context words
+            startMs: segmentStartMs,
+            endMs: segmentEndMs,
+            matchIndex: i
+          });
+        }
+      }
+    }
+
+    return matches.sort((a, b) => a.startMs - b.startMs);
+  }
+
+  /**
+   * Check if phrases match with some tolerance for variations
+   */
+  private phraseMatches(text1: string, text2: string): boolean {
+    // Remove punctuation and normalize spacing
+    const normalize = (str: string) => str.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+    const norm1 = normalize(text1);
+    const norm2 = normalize(text2);
+    
+    return norm1.includes(norm2) || norm2.includes(norm1);
   }
 }

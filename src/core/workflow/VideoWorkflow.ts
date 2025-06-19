@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs/promises';
 import { logger } from '../../utils/logger.js';
 import { PerformanceMonitor } from '../platforms/PerformanceMonitor.js';
 
@@ -8,6 +9,7 @@ import { MetadataExtractor } from '../video/MetadataExtractor.js';
 import { AudioExtractor } from '../video/AudioExtractor.js';
 import { TranscriptionEngine } from '../video/TranscriptionEngine.js';
 import { FrameSampler } from '../video/FrameSampler.js';
+import { LazyFrameExtractor } from '../video/LazyFrameExtractor.js';
 import { ContentProcessor } from '../content/ContentProcessor.js';
 
 // Database components
@@ -36,6 +38,11 @@ export interface VideoWorkflowOptions {
   };
   outputDirectory?: string;
   skipValidation?: boolean;
+  audioFirstMode?: boolean; // New: Enable audio-first processing for faster results
+  fastAudioExtraction?: boolean; // New: Use fast audio settings (less quality, more speed)
+  customTitle?: string; // New: Custom title for the memory (useful for YouTube videos)
+  cleanupVideoAfterProcessing?: boolean; // New: Delete video file after processing to save storage
+  keepAudioFiles?: boolean; // New: Keep extracted audio files for future use
 }
 
 export interface VideoWorkflowResult {
@@ -59,6 +66,9 @@ export interface VideoWorkflowResult {
     chunksGenerated?: number;
     embeddingsGenerated?: number;
     framesExtracted?: number;
+    framesSamplingDeferred?: boolean; // New: Indicates frame sampling was deferred for audio-first mode
+    videoFileDeleted?: boolean; // New: Indicates if video file was cleaned up
+    storageSpaceSaved?: number; // New: Bytes saved by cleanup
   };
   errors: string[];
   warnings: string[];
@@ -80,6 +90,7 @@ export class VideoWorkflow {
   private audioExtractor: AudioExtractor;
   private transcriptionEngine: TranscriptionEngine;
   private frameSampler: FrameSampler;
+  private lazyFrameExtractor: LazyFrameExtractor;
   private contentProcessor: ContentProcessor;
 
   constructor() {
@@ -96,6 +107,7 @@ export class VideoWorkflow {
     this.audioExtractor = new AudioExtractor();
     this.transcriptionEngine = new TranscriptionEngine();
     this.frameSampler = new FrameSampler();
+    this.lazyFrameExtractor = new LazyFrameExtractor();
     this.contentProcessor = new ContentProcessor();
   }
 
@@ -135,17 +147,23 @@ export class VideoWorkflow {
       await database.initialize();
 
       logger.info(`Starting video workflow: ${path.basename(videoPath)}`);
+      logger.debug(`Video path: ${videoPath}, space: ${spaceId}, options:`, opts);
 
       // Step 1: Create processing job
+      logger.debug('Creating processing job...');
       const job = await this.createProcessingJob(videoPath, opts);
       result.jobId = job.id;
+      logger.debug(`Created job with ID: ${job.id}`);
 
       // Step 2: Validate video
       if (!opts.skipValidation) {
+        logger.debug('Starting video validation...');
         await this.updateJobStep(job.id, 'validation', 'running');
         const validationResult = await VideoValidator.validateVideoFile(videoPath);
+        logger.debug('Validation result:', validationResult);
         
         if (!validationResult.isValid) {
+          logger.error('Video validation failed:', validationResult.errors);
           result.errors.push(...validationResult.errors);
           await this.updateJobStep(job.id, 'validation', 'failed', null, validationResult.errors.join('; '));
           await this.videoProcessingRepo.updateJobStatus(job.id, 'failed', 10);
@@ -176,9 +194,15 @@ export class VideoWorkflow {
 
       // Step 4: Extract audio
       await this.updateJobStep(job.id, 'audio-extraction', 'running');
+      
+      // Choose audio extraction settings based on audioFirstMode
+      const audioSettings = opts.fastAudioExtraction 
+        ? AudioExtractor.getFastTranscriptionSettings()
+        : AudioExtractor.getOptimalTranscriptionSettings();
+      
       const audioResult = await this.audioExtractor.extractAudio(videoPath, {
         outputDirectory: `${opts.outputDirectory}/audio`,
-        ...AudioExtractor.getOptimalTranscriptionSettings()
+        ...audioSettings
       });
 
       if (!audioResult.success) {
@@ -227,8 +251,8 @@ export class VideoWorkflow {
         await this.videoProcessingRepo.updateJobStatus(job.id, 'processing', 60);
       }
 
-      // Step 6: Frame sampling (if enabled)
-      if (opts.enableFrameSampling) {
+      // Step 6: Frame sampling (if enabled and not in audio-first mode)
+      if (opts.enableFrameSampling && !opts.audioFirstMode) {
         await this.updateJobStep(job.id, 'frame-sampling', 'running');
         const frameResult = await this.frameSampler.extractFrames(videoPath, {
           outputDirectory: `${opts.outputDirectory}/frames`,
@@ -243,6 +267,18 @@ export class VideoWorkflow {
           result.steps.frameSampling = true;
           result.outputs.framesExtracted = frameResult.totalFramesExtracted;
           await this.updateJobStep(job.id, 'frame-sampling', 'completed');
+        }
+      } else if (opts.enableFrameSampling && opts.audioFirstMode) {
+        // In audio-first mode, defer frame sampling until requested
+        // Prepare video for on-demand frame extraction (lightweight operation)
+        try {
+          await this.lazyFrameExtractor.prepareVideo(videoPath);
+          result.steps.frameSampling = false; // Not processed yet
+          result.outputs.framesSamplingDeferred = true;
+          logger.debug('Video prepared for on-demand frame extraction');
+        } catch (error) {
+          result.warnings.push(`Failed to prepare video for frame extraction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          logger.warn('Failed to prepare video for on-demand frame extraction:', error);
         }
       }
 
@@ -278,13 +314,20 @@ export class VideoWorkflow {
 
       // Step 8: Store in database
       await this.updateJobStep(job.id, 'database-storage', 'running');
+      logger.debug('About to store in database with processedContent:', {
+        hasProcessedContent: !!processedContent,
+        chunksCount: processedContent?.chunks?.length || 0,
+        hasTranscriptData: !!transcriptData
+      });
+      
       const memoryId = await this.storeInDatabase(
         job.id,
         videoPath,
         spaceId,
         metadata,
         transcriptData,
-        processedContent
+        processedContent,
+        opts
       );
 
       if (memoryId) {
@@ -292,6 +335,22 @@ export class VideoWorkflow {
         result.memoryId = memoryId;
         await this.updateJobStep(job.id, 'database-storage', 'completed');
         await this.videoProcessingRepo.updateJobStatus(job.id, 'completed', 100);
+
+        // Step 9: Clean up video file if requested (save storage space)
+        if (opts.cleanupVideoAfterProcessing) {
+          try {
+            const cleanupResult = await this.cleanupVideoFile(videoPath, result.outputs.audioPath, opts);
+            result.outputs.videoFileDeleted = cleanupResult.deleted;
+            result.outputs.storageSpaceSaved = cleanupResult.spaceFreed;
+            
+            if (cleanupResult.deleted) {
+              logger.info(`Video file cleaned up: ${videoPath} (saved ${Math.round(cleanupResult.spaceFreed / 1024 / 1024)}MB)`);
+            }
+          } catch (error) {
+            result.warnings.push(`Video cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            logger.warn('Video file cleanup failed:', error);
+          }
+        }
       } else {
         result.errors.push('Failed to store content in database');
         await this.updateJobStep(job.id, 'database-storage', 'failed', null, 'Database storage failed');
@@ -304,6 +363,7 @@ export class VideoWorkflow {
       result.success = true;
 
       logger.info(`Video workflow completed successfully: ${result.jobId} in ${result.processingTime}ms`);
+      logger.debug('Final result:', { success: result.success, memoryId: result.memoryId, processingTime: result.processingTime });
 
       this.performanceMonitor.recordMetric({
         name: 'video.workflow.duration',
@@ -325,6 +385,7 @@ export class VideoWorkflow {
       result.processingTime = Date.now() - startTime;
 
       logger.error(`Video workflow failed for ${videoPath}:`, error);
+      logger.debug('Error result:', { success: result.success, errors: result.errors, processingTime: result.processingTime });
 
       // Update job status
       if (result.jobId) {
@@ -342,6 +403,7 @@ export class VideoWorkflow {
       this.performanceMonitor.endOperation(operationId, 'video-workflow', false);
     }
 
+    logger.debug('Returning final result:', { success: result.success, memoryId: result.memoryId, processingTime: result.processingTime, errors: result.errors });
     return result;
   }
 
@@ -362,6 +424,35 @@ export class VideoWorkflow {
     };
   }
 
+  /**
+   * Extract frame on-demand for audio-first processed videos
+   */
+  async extractFrameOnDemand(
+    videoPath: string, 
+    timestamp: number,
+    options: { width?: number; height?: number; quality?: number } = {}
+  ) {
+    try {
+      return await this.lazyFrameExtractor.extractFrameOnDemand(videoPath, timestamp, {
+        width: options.width || 640,
+        height: options.height || 360,
+        quality: options.quality || 80,
+        cacheFrame: true,
+        useCache: true
+      });
+    } catch (error) {
+      logger.error(`Failed to extract frame on-demand: ${videoPath} at ${timestamp}s`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get suggested timestamps for frame extraction
+   */
+  async getSuggestedFrameTimestamps(videoPath: string, frameCount: number = 5): Promise<number[]> {
+    return this.lazyFrameExtractor.getSuggestedTimestamps(videoPath, frameCount);
+  }
+
   // Private methods
 
   private getDefaultOptions(options: VideoWorkflowOptions): Required<VideoWorkflowOptions> {
@@ -376,6 +467,11 @@ export class VideoWorkflow {
       },
       outputDirectory: './temp/workflow-output',
       skipValidation: false,
+      audioFirstMode: true, // Enable audio-first by default for better performance
+      fastAudioExtraction: true, // Use fast audio extraction by default
+      customTitle: '', // Default to empty, will use filename if not provided
+      cleanupVideoAfterProcessing: true, // Delete video files by default to save storage
+      keepAudioFiles: true, // Keep audio files for future use
       ...options
     };
   }
@@ -415,7 +511,8 @@ export class VideoWorkflow {
     spaceId: string,
     metadata: any,
     transcriptData: any,
-    processedContent: any
+    processedContent: any,
+    options: Required<VideoWorkflowOptions>
   ): Promise<string | null> {
     try {
       // Create memory record
@@ -423,7 +520,7 @@ export class VideoWorkflow {
         id: `memory-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         spaceId,
         contentType: 'video',
-        title: path.basename(videoPath),
+        title: options.customTitle || path.basename(videoPath),
         content: transcriptData?.full_text || 'Video content',
         source: videoPath,
         filePath: videoPath,
@@ -431,13 +528,22 @@ export class VideoWorkflow {
           duration: metadata?.duration || 0,
           format: metadata?.format || 'unknown',
           resolution: metadata?.resolution || { width: 0, height: 0 },
-          processingJobId: jobId
+          processingJobId: jobId,
+          originalTitle: options.customTitle ? path.basename(videoPath) : undefined
         }
       };
 
       const createdMemory = await this.memoryRepo.create(memory);
 
       // Store processed content if available
+      logger.debug('Storing in database - processedContent:', !!processedContent, 'transcriptData:', !!transcriptData);
+      logger.debug('Processed content chunks count:', processedContent?.chunks?.length || 0);
+      logger.debug('First chunk sample:', processedContent?.chunks?.[0] ? {
+        id: processedContent.chunks[0].id,
+        hasContent: !!processedContent.chunks[0].content,
+        contentLength: processedContent.chunks[0].content?.length
+      } : 'No chunks');
+      
       if (processedContent && transcriptData) {
         const videoContent: Omit<ProcessedVideoContent, 'createdAt'> = {
           id: `content-${jobId}`,
@@ -467,22 +573,29 @@ export class VideoWorkflow {
         await this.videoProcessingRepo.storeProcessedContent(videoContent);
 
         // Store individual chunks in chunks table
+        logger.debug('About to store chunks, count:', processedContent.chunks?.length || 0);
         if (processedContent.chunks) {
           for (const chunk of processedContent.chunks) {
-            await this.chunkRepo.create({
-              id: chunk.id,
-              memoryId: createdMemory.id,
-              chunkText: chunk.content,
-              chunkOrder: chunk.chunkIndex,
-              startOffset: chunk.startTime ? Math.floor(chunk.startTime * 1000) : undefined,
-              endOffset: chunk.endTime ? Math.floor(chunk.endTime * 1000) : undefined,
-              metadata: {
-                wordCount: chunk.wordCount,
-                characterCount: chunk.characterCount,
-                hasTimestamps: chunk.startTime !== undefined,
-                processingJobId: jobId
-              }
-            });
+            logger.debug('Storing chunk:', chunk.id, 'content length:', chunk.content?.length || 0);
+            try {
+              await this.chunkRepo.create({
+                id: chunk.id,
+                memoryId: createdMemory.id,
+                chunkText: chunk.content,
+                chunkOrder: chunk.chunkIndex,
+                startOffset: chunk.startTime ? Math.floor(chunk.startTime * 1000) : undefined,
+                endOffset: chunk.endTime ? Math.floor(chunk.endTime * 1000) : undefined,
+                metadata: {
+                  wordCount: chunk.wordCount,
+                  characterCount: chunk.characterCount,
+                  hasTimestamps: chunk.startTime !== undefined,
+                  processingJobId: jobId
+                }
+              });
+              logger.debug('Successfully stored chunk:', chunk.id);
+            } catch (error) {
+              logger.error('Failed to store chunk:', chunk.id, error);
+            }
           }
         }
       }
@@ -493,5 +606,64 @@ export class VideoWorkflow {
       logger.error('Failed to store video content in database:', error);
       return null;
     }
+  }
+
+  /**
+   * Clean up video file after successful processing to save storage space
+   * Keeps audio files and transcripts but removes the large video file
+   */
+  private async cleanupVideoFile(
+    videoPath: string,
+    audioPath?: string,
+    options?: Required<VideoWorkflowOptions>
+  ): Promise<{ deleted: boolean; spaceFreed: number; audioKept: boolean }> {
+    const result = {
+      deleted: false,
+      spaceFreed: 0,
+      audioKept: false
+    };
+
+    try {
+      // Get file size before deletion for reporting
+      const stats = await fs.stat(videoPath);
+      const videoSize = stats.size;
+
+      // Ensure we have audio extracted before deleting video
+      if (audioPath && options?.keepAudioFiles) {
+        try {
+          await fs.access(audioPath);
+          result.audioKept = true;
+          logger.debug(`Audio file preserved: ${audioPath}`);
+        } catch {
+          logger.warn(`Audio file not found: ${audioPath}, skipping video deletion for safety`);
+          return result;
+        }
+      }
+
+      // Delete the video file
+      await fs.unlink(videoPath);
+      result.deleted = true;
+      result.spaceFreed = videoSize;
+
+      logger.info(`Video file deleted: ${videoPath} (${Math.round(videoSize / 1024 / 1024)}MB freed)`);
+
+      // Record cleanup metrics
+      this.performanceMonitor.recordMetric({
+        name: 'video.cleanup.size_freed',
+        value: videoSize,
+        unit: 'bytes',
+        timestamp: new Date(),
+        tags: {
+          audioKept: result.audioKept.toString(),
+          sizeMB: Math.round(videoSize / 1024 / 1024).toString()
+        }
+      });
+
+    } catch (error) {
+      logger.error(`Failed to delete video file: ${videoPath}`, error);
+      throw error;
+    }
+
+    return result;
   }
 }

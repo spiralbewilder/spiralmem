@@ -134,6 +134,16 @@ export interface SearchResult {
   similarity?: number;
   highlights?: string[];
   context?: string;
+  timestamps?: {
+    startMs: number;
+    endMs: number;
+    wordMatches?: Array<{
+      word: string;
+      startMs: number;
+      endMs: number;
+      matchIndex: number;
+    }>;
+  };
 }
 
 export interface SearchOptions {

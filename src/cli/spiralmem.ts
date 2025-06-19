@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import { MemoryEngine } from '../core/MemoryEngine.js';
 import { VideoWorkflow } from '../core/workflow/VideoWorkflow.js';
+import { YouTubeDownloader } from '../core/video/YouTubeDownloader.js';
 import { loadConfig } from '../utils/config.js';
 import { logger } from '../utils/logger.js';
 import { spawn } from 'child_process';
@@ -79,25 +80,57 @@ program
   .option('-t, --title <title>', 'Custom title for the video')
   .option('--model <model>', 'Whisper model to use', 'base')
   .option('--no-transcription', 'Skip transcription')
+  .option('--keep-video', 'Keep video file after processing (default: delete to save space)')
+  .option('--no-keep-audio', 'Delete audio file after processing (default: keep audio)')
   .action(async (videoPath, options) => {
     try {
       // Check if this is a YouTube URL
       const isYouTubeUrl = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/.test(videoPath);
       
+      let actualVideoPath = videoPath;
+      let suggestedTitle = options.title;
+
       if (isYouTubeUrl) {
-        console.error('❌ YouTube URL processing not yet implemented');
-        console.log('');
-        console.log('Currently, Spiralmem only supports local video files.');
-        console.log('YouTube integration is planned for a future release.');
-        console.log('');
-        console.log('To process a YouTube video:');
-        console.log('1. Download the video using yt-dlp or similar tool');
-        console.log('2. Then run: spiralmem add-video /path/to/downloaded/video.mp4');
-        process.exit(1);
+        if (!program.opts().quiet) {
+          console.log('🔗 YouTube URL detected, downloading video...');
+        }
+
+        try {
+          // Download YouTube video
+          const youtubeDownloader = new YouTubeDownloader();
+          const downloadResult = await youtubeDownloader.downloadVideo(videoPath, {
+            outputDirectory: './temp/youtube-downloads',
+            format: 'mp4',
+            quality: '720p',
+            maxFileSize: '500M',
+            maxDuration: 3600 // 1 hour limit
+          });
+
+          if (!downloadResult.success) {
+            console.error('❌ YouTube download failed:', downloadResult.errors.join(', '));
+            process.exit(1);
+          }
+
+          actualVideoPath = downloadResult.downloadedFile!;
+          suggestedTitle = suggestedTitle || downloadResult.suggestedTitle;
+
+          if (!program.opts().quiet) {
+            console.log(`✅ Downloaded: ${downloadResult.videoInfo?.title}`);
+            console.log(`📁 Saved to: ${actualVideoPath}`);
+          }
+
+        } catch (error) {
+          console.error('❌ YouTube download failed:', error instanceof Error ? error.message : error);
+          console.log('');
+          console.log('💡 To fix this issue:');
+          console.log('1. Install yt-dlp: pip install yt-dlp');
+          console.log('2. Or download the video manually and process the local file');
+          process.exit(1);
+        }
       }
       
       if (!program.opts().quiet) {
-        console.log(`🎥 Processing video: ${path.basename(videoPath)}`);
+        console.log(`🎥 Processing video: ${path.basename(actualVideoPath)}`);
       }
       
       const engine = new MemoryEngine();
@@ -105,8 +138,11 @@ program
       
       const workflow = new VideoWorkflow();
       
-      const result = await workflow.processVideo(videoPath, options.space, {
-        enableTranscription: options.transcription
+      const result = await workflow.processVideo(actualVideoPath, options.space, {
+        enableTranscription: options.transcription,
+        customTitle: suggestedTitle, // Use YouTube title if available
+        cleanupVideoAfterProcessing: !options.keepVideo, // Delete video unless --keep-video specified
+        keepAudioFiles: options.keepAudio !== false // Keep audio unless --no-keep-audio specified
       });
       
       if (!program.opts().quiet) {
@@ -115,6 +151,10 @@ program
         console.log(`   Processing time: ${result.processingTime}ms`);
         if (result.outputs.chunksGenerated) {
           console.log(`   Chunks generated: ${result.outputs.chunksGenerated}`);
+        }
+        if (result.outputs.videoFileDeleted && result.outputs.storageSpaceSaved) {
+          const mbSaved = Math.round(result.outputs.storageSpaceSaved / 1024 / 1024);
+          console.log(`   💾 Storage saved: ${mbSaved}MB (video file cleaned up)`);
         }
       }
       
@@ -130,6 +170,7 @@ program
   .description('Search across all memories')
   .option('-s, --space <name>', 'Search within specific space')
   .option('-l, --limit <number>', 'Maximum number of results', '10')
+  .option('--timestamps', 'Include precise timestamps for spoken words')
   .option('--json', 'Output results as JSON')
   .action(async (query, options) => {
     try {
@@ -142,7 +183,13 @@ program
         limit: parseInt(options.limit)
       };
       
-      const results = await engine.searchMemories(searchQuery);
+      // Use enhanced search with timestamps if requested
+      const results = options.timestamps 
+        ? await engine.searchWithTimestamps(query, {
+            spaceId: options.space,
+            limit: parseInt(options.limit)
+          })
+        : await engine.searchMemories(searchQuery);
       
       if (options.json) {
         console.log(JSON.stringify(results, null, 2));
@@ -151,6 +198,9 @@ program
           console.log('🔍 No results found for:', query);
         } else {
           console.log(`🔍 Found ${results.length} result(s) for: ${query}`);
+          if (options.timestamps) {
+            console.log('⏱️  Including precise timestamps for spoken words');
+          }
           console.log('');
           
           results.forEach((result, index) => {
@@ -158,8 +208,25 @@ program
             console.log(`   Type: ${result.memory.contentType}`);
             console.log(`   Space: ${result.memory.spaceId}`);
             console.log(`   Source: ${result.memory.source}`);
+            
             if (result.chunk) {
               console.log(`   Match: "${result.chunk.chunkText.substring(0, 100)}..."`);
+              
+              if (options.timestamps && result.timestamps) {
+                const startSec = Math.floor(result.timestamps.startMs / 1000);
+                const endSec = Math.floor(result.timestamps.endMs / 1000);
+                console.log(`   ⏱️  Chunk: ${startSec}s - ${endSec}s (${result.timestamps.startMs}ms - ${result.timestamps.endMs}ms)`);
+                
+                if (result.timestamps.wordMatches && result.timestamps.wordMatches.length > 0) {
+                  console.log(`   🎬 Compilation Segments:`);
+                  result.timestamps.wordMatches.forEach((match, idx) => {
+                    const startSec = (match.startMs / 1000).toFixed(2);
+                    const endSec = (match.endMs / 1000).toFixed(2);
+                    const duration = ((match.endMs - match.startMs) / 1000).toFixed(2);
+                    console.log(`      ${idx + 1}. "${match.word}" • ${startSec}s-${endSec}s (${duration}s) • ${match.startMs}-${match.endMs}ms`);
+                  });
+                }
+              }
             }
             console.log('');
           });
@@ -168,6 +235,415 @@ program
       
     } catch (error) {
       console.error('❌ Search failed:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+// Compilation segments command - specialized for video editing
+program
+  .command('extract-segments <query>')
+  .description('Extract precise video segments for compilation/editing')
+  .option('-s, --space <name>', 'Search within specific space')
+  .option('-l, --limit <number>', 'Maximum number of results', '20')
+  .option('--min-duration <seconds>', 'Minimum segment duration', '0.5')
+  .option('--max-duration <seconds>', 'Maximum segment duration', '10')
+  .option('--csv', 'Output as CSV for video editing tools')
+  .action(async (query, options) => {
+    try {
+      const engine = new MemoryEngine();
+      await engine.initialize();
+      
+      const results = await engine.searchWithTimestamps(query, {
+        spaceId: options.space,
+        limit: parseInt(options.limit)
+      });
+      
+      const minDuration = parseFloat(options.minDuration) * 1000; // Convert to ms
+      const maxDuration = parseFloat(options.maxDuration) * 1000;
+      
+      // Collect all segments for compilation
+      const segments: Array<{
+        source: string;
+        title: string;
+        text: string;
+        startMs: number;
+        endMs: number;
+        durationMs: number;
+        speaker?: string;
+      }> = [];
+      
+      results.forEach(result => {
+        if (result.timestamps?.wordMatches) {
+          result.timestamps.wordMatches.forEach(match => {
+            const duration = match.endMs - match.startMs;
+            
+            // Filter by duration
+            if (duration >= minDuration && duration <= maxDuration) {
+              segments.push({
+                source: result.memory.source,
+                title: result.memory.title || 'Untitled',
+                text: match.word,
+                startMs: match.startMs,
+                endMs: match.endMs,
+                durationMs: duration,
+                speaker: (result.memory.metadata?.speaker as string) || 'Unknown'
+              });
+            }
+          });
+        }
+      });
+      
+      if (options.csv) {
+        console.log('source,title,text,start_ms,end_ms,duration_ms,speaker');
+        segments.forEach(seg => {
+          const escapeCsv = (str: string) => `"${str.replace(/"/g, '""')}"`;
+          console.log([
+            escapeCsv(seg.source),
+            escapeCsv(seg.title),
+            escapeCsv(seg.text),
+            seg.startMs,
+            seg.endMs,
+            seg.durationMs,
+            escapeCsv(seg.speaker || 'Unknown')
+          ].join(','));
+        });
+      } else {
+        if (segments.length === 0) {
+          console.log('🎬 No compilation segments found for:', query);
+          console.log(`   Duration filter: ${options.minDuration}s - ${options.maxDuration}s`);
+        } else {
+          console.log(`🎬 Found ${segments.length} compilation segment(s) for: "${query}"`);
+          console.log(`   Duration filter: ${options.minDuration}s - ${options.maxDuration}s`);
+          console.log('');
+          
+          segments.forEach((seg, index) => {
+            const startSec = (seg.startMs / 1000).toFixed(2);
+            const endSec = (seg.endMs / 1000).toFixed(2);
+            const duration = (seg.durationMs / 1000).toFixed(2);
+            
+            console.log(`${index + 1}. ${seg.title} (${seg.speaker})`);
+            console.log(`   Text: "${seg.text}"`);
+            console.log(`   Time: ${startSec}s - ${endSec}s (${duration}s)`);
+            console.log(`   File: ${seg.source}`);
+            console.log(`   ffmpeg: -ss ${startSec} -t ${duration} -i "${seg.source}"`);
+            console.log('');
+          });
+          
+          console.log(`💡 Use --csv flag to export for video editing tools`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Segment extraction failed:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+// Download segments command - for YouTube/Rumble compilation creation
+program
+  .command('download-segments <query>')
+  .description('Download video segments from YouTube/Rumble for compilation')
+  .option('-s, --space <name>', 'Search within specific space')
+  .option('-l, --limit <number>', 'Maximum number of segments', '10')
+  .option('--min-duration <seconds>', 'Minimum segment duration', '0.5')
+  .option('--max-duration <seconds>', 'Maximum segment duration', '10')
+  .option('-q, --quality <quality>', 'Video quality (720p, 1080p, 480p)', '720p')
+  .option('-o, --output <directory>', 'Output directory', './compilation-segments')
+  .action(async (query, options) => {
+    try {
+      const { YouTubeDownloader } = await import('../core/video/YouTubeDownloader.js');
+      const engine = new MemoryEngine();
+      await engine.initialize();
+      
+      // Search for segments first
+      const results = await engine.searchWithTimestamps(query, {
+        spaceId: options.space,
+        limit: parseInt(options.limit)
+      });
+      
+      const minDuration = parseFloat(options.minDuration) * 1000;
+      const maxDuration = parseFloat(options.maxDuration) * 1000;
+      
+      // Group segments by source URL (for batch downloading)
+      const urlSegments = new Map<string, Array<{
+        startMs: number;
+        endMs: number;
+        text: string;
+        title: string;
+      }>>();
+      
+      results.forEach(result => {
+        if (result.timestamps?.wordMatches) {
+          const sourceUrl = result.memory.source;
+          
+          // Only process YouTube/Rumble URLs
+          if (sourceUrl.includes('youtube.com') || sourceUrl.includes('youtu.be') || sourceUrl.includes('rumble.com')) {
+            result.timestamps.wordMatches.forEach(match => {
+              const duration = match.endMs - match.startMs;
+              
+              if (duration >= minDuration && duration <= maxDuration) {
+                if (!urlSegments.has(sourceUrl)) {
+                  urlSegments.set(sourceUrl, []);
+                }
+                
+                urlSegments.get(sourceUrl)!.push({
+                  startMs: match.startMs,
+                  endMs: match.endMs,
+                  text: match.word,
+                  title: result.memory.title || 'Untitled'
+                });
+              }
+            });
+          }
+        }
+      });
+      
+      if (urlSegments.size === 0) {
+        console.log('🎬 No YouTube/Rumble segments found for compilation');
+        console.log(`   Duration filter: ${options.minDuration}s - ${options.maxDuration}s`);
+        return;
+      }
+      
+      console.log(`🎬 Found segments from ${urlSegments.size} video(s) for: "${query}"`);
+      console.log(`📁 Output directory: ${options.output}`);
+      console.log('');
+      
+      const downloader = new YouTubeDownloader();
+      let totalDownloaded = 0;
+      let totalFailed = 0;
+      
+      // Download segments from each URL
+      for (const [url, segments] of urlSegments) {
+        console.log(`📺 Processing: ${url}`);
+        console.log(`   ${segments.length} segment(s) to download...`);
+        
+        try {
+          const downloadResult = await downloader.downloadSegments(
+            url,
+            segments.map((seg, idx) => ({
+              startMs: seg.startMs,
+              endMs: seg.endMs,
+              outputName: `${query.replace(/\s+/g, '_')}_${idx + 1}_${seg.startMs}-${seg.endMs}.${options.quality === 'best' ? 'mp4' : 'mp4'}`
+            })),
+            {
+              outputDirectory: options.output,
+              quality: options.quality,
+              format: 'mp4'
+            }
+          );
+          
+          const successful = downloadResult.segments.filter(s => s.success).length;
+          const failed = downloadResult.segments.filter(s => !s.success).length;
+          
+          totalDownloaded += successful;
+          totalFailed += failed;
+          
+          console.log(`   ✅ Downloaded: ${successful}/${segments.length} segments`);
+          
+          if (failed > 0) {
+            console.log(`   ❌ Failed: ${failed} segments`);
+            downloadResult.segments.filter(s => !s.success).forEach(seg => {
+              console.log(`      ${seg.startMs}-${seg.endMs}ms: ${seg.error}`);
+            });
+          }
+          
+          // List successful downloads
+          downloadResult.segments.filter(s => s.success).forEach(seg => {
+            const duration = (seg.duration).toFixed(1);
+            console.log(`      📁 ${path.basename(seg.filePath)} (${duration}s)`);
+          });
+          
+        } catch (error) {
+          console.error(`   ❌ Failed to download from ${url}:`, error instanceof Error ? error.message : error);
+          totalFailed += segments.length;
+        }
+        
+        console.log('');
+      }
+      
+      console.log(`🎬 Compilation download complete!`);
+      console.log(`   ✅ Downloaded: ${totalDownloaded} segments`);
+      console.log(`   ❌ Failed: ${totalFailed} segments`);
+      console.log(`   📁 Location: ${options.output}`);
+      
+      if (totalDownloaded > 0) {
+        console.log('');
+        console.log('💡 Next steps:');
+        console.log(`   1. Review segments in: ${options.output}`);
+        console.log(`   2. Use video editing software to create compilation`);
+        console.log(`   3. All segments are pre-cut to exact timestamps`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Segment download failed:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+// Semantic search command
+program
+  .command('semantic-search <query>')
+  .description('Perform semantic search using AI embeddings')
+  .option('-s, --space <name>', 'Search within specific space')
+  .option('-l, --limit <number>', 'Maximum number of results', '10')
+  .option('--threshold <number>', 'Similarity threshold (0.0-1.0)', '0.6')
+  .option('--timestamps', 'Include precise timestamps for spoken words')
+  .option('--json', 'Output results as JSON')
+  .action(async (query, options) => {
+    try {
+      const engine = new MemoryEngine();
+      await engine.initialize();
+      
+      const results = await engine.semanticSearch(query, {
+        maxResults: parseInt(options.limit),
+        similarityThreshold: parseFloat(options.threshold)
+      });
+      
+      if (options.json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        if (results.length === 0) {
+          console.log('🔍 No semantic matches found for:', query);
+          console.log(`   Similarity threshold: ${options.threshold}`);
+          console.log('   Try a lower threshold or generate embeddings first with: spiralmem generate-embeddings');
+        } else {
+          console.log(`🧠 Found ${results.length} semantic match(es) for: ${query}`);
+          console.log(`   Similarity threshold: ${options.threshold}`);
+          console.log('');
+          
+          results.forEach((result, index) => {
+            console.log(`${index + 1}. ${result.memory.title || 'Untitled'} (similarity: ${(result.similarity || 0).toFixed(3)})`);
+            console.log(`   Type: ${result.memory.contentType}`);
+            console.log(`   Space: ${result.memory.spaceId}`);
+            console.log(`   Source: ${result.memory.source}`);
+            
+            if (result.chunk) {
+              console.log(`   Match: "${result.chunk.chunkText.substring(0, 100)}..."`);
+              
+              if (options.timestamps && result.chunk.startOffset) {
+                const startSec = Math.floor(result.chunk.startOffset / 1000);
+                console.log(`   ⏱️  Timestamp: ${startSec}s (${result.chunk.startOffset}ms)`);
+              }
+            }
+            
+            console.log('');
+          });
+          
+          console.log('💡 Semantic search finds conceptually similar content, not just exact word matches');
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Semantic search failed:', error instanceof Error ? error.message : error);
+      console.log('');
+      console.log('💡 To enable semantic search:');
+      console.log('1. Install dependencies: pip install sentence-transformers');
+      console.log('2. Generate embeddings: spiralmem generate-embeddings');
+      process.exit(1);
+    }
+  });
+
+// Generate embeddings command
+program
+  .command('generate-embeddings')
+  .description('Generate AI embeddings for semantic search')
+  .option('--memory-ids <ids>', 'Comma-separated memory IDs to index')
+  .option('--force', 'Regenerate existing embeddings')
+  .option('--batch-size <size>', 'Batch size for processing', '32')
+  .action(async (options) => {
+    try {
+      const engine = new MemoryEngine();
+      await engine.initialize();
+      
+      console.log('🧠 Generating embeddings for semantic search...');
+      console.log('   This may take a few minutes depending on content amount');
+      console.log('');
+      
+      const memoryIds = options.memoryIds ? options.memoryIds.split(',') : undefined;
+      
+      const result = await engine.generateEmbeddings({
+        memoryIds,
+        forceRegenerate: options.force,
+        batchSize: parseInt(options.batchSize)
+      });
+      
+      if (result.success) {
+        console.log('✅ Embedding generation completed!');
+        console.log(`   ✅ Indexed: ${result.indexed} chunks`);
+        if (result.failed > 0) {
+          console.log(`   ❌ Failed: ${result.failed} chunks`);
+        }
+        console.log('');
+        console.log('🔍 You can now use semantic search:');
+        console.log('   spiralmem semantic-search "artificial intelligence"');
+        console.log('   spiralmem semantic-search "climate change" --threshold 0.7');
+      } else {
+        console.log('❌ Embedding generation failed');
+        result.errors.forEach(error => console.log(`   ${error}`));
+        console.log('');
+        console.log('💡 Make sure you have sentence-transformers installed:');
+        console.log('   pip install sentence-transformers');
+      }
+      
+    } catch (error) {
+      console.error('❌ Embedding generation failed:', error instanceof Error ? error.message : error);
+      console.log('');
+      console.log('💡 To fix this issue:');
+      console.log('1. Install Python dependencies: pip install sentence-transformers torch');
+      console.log('2. Ensure Python 3.8+ is available');
+      process.exit(1);
+    }
+  });
+
+// Vector stats command
+program
+  .command('vector-stats')
+  .description('Show semantic search index statistics')
+  .option('--json', 'Output as JSON')
+  .action(async (options) => {
+    try {
+      const engine = new MemoryEngine();
+      await engine.initialize();
+      
+      const stats = await engine.getVectorStats();
+      
+      if (options.json) {
+        console.log(JSON.stringify(stats, null, 2));
+      } else {
+        console.log('🧠 Semantic Search Index Statistics');
+        console.log('');
+        console.log(`Total Embeddings: ${stats.totalEmbeddings}`);
+        console.log(`Average Dimensions: ${stats.averageDimensions}`);
+        
+        if (Object.keys(stats.embeddingsByType).length > 0) {
+          console.log('');
+          console.log('By Content Type:');
+          Object.entries(stats.embeddingsByType).forEach(([type, count]) => {
+            console.log(`  ${type}: ${count}`);
+          });
+        }
+        
+        if (Object.keys(stats.embeddingsByModel).length > 0) {
+          console.log('');
+          console.log('By Model:');
+          Object.entries(stats.embeddingsByModel).forEach(([model, count]) => {
+            console.log(`  ${model}: ${count}`);
+          });
+        }
+        
+        if (stats.totalEmbeddings === 0) {
+          console.log('');
+          console.log('💡 No embeddings found. Generate them with:');
+          console.log('   spiralmem generate-embeddings');
+        } else {
+          console.log('');
+          console.log('🔍 Semantic search is available with:');
+          console.log('   spiralmem semantic-search "your query"');
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to get vector stats:', error instanceof Error ? error.message : error);
       process.exit(1);
     }
   });
@@ -510,8 +986,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Configure logging based on CLI options
   if (process.argv.includes('--verbose')) {
     logger.level = 'debug';
+    // Also update the transport levels for winston
+    logger.transports.forEach(transport => {
+      transport.level = 'debug';
+    });
   } else if (process.argv.includes('--quiet')) {
     logger.level = 'error';
+    logger.transports.forEach(transport => {
+      transport.level = 'error';
+    });
   }
   
   program.parse();

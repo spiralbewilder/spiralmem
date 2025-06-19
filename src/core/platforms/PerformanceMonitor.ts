@@ -303,7 +303,16 @@ export class PerformanceMonitor {
   // Private helper methods
 
   private initializeThresholds(): void {
-    this.thresholds.set('response_time', { warning: 2000, critical: 5000 });
+    // General response time thresholds (for API calls, search, etc.)
+    this.thresholds.set('response_time', { warning: 5000, critical: 15000 }); // 5s warning, 15s critical
+    
+    // Video processing specific thresholds (longer operations)
+    this.thresholds.set('video_processing', { warning: 45000, critical: 120000 }); // 45s warning, 2min critical
+    this.thresholds.set('audio_extraction', { warning: 20000, critical: 45000 }); // 20s warning, 45s critical
+    this.thresholds.set('transcription', { warning: 30000, critical: 90000 }); // 30s warning, 90s critical
+    this.thresholds.set('content_processing', { warning: 5000, critical: 15000 }); // 5s warning, 15s critical
+    
+    // System resource thresholds
     this.thresholds.set('error_rate', { warning: 5, critical: 10 });
     this.thresholds.set('memory_usage', { warning: 80, critical: 95 });
     this.thresholds.set('throughput', { warning: 1, critical: 0.5 });
@@ -323,11 +332,19 @@ export class PerformanceMonitor {
   }
 
   private getThresholdKey(metricName: string): string {
+    // Video processing specific metrics
+    if (metricName.includes('video.workflow') || metricName.includes('processVideo')) return 'video_processing';
+    if (metricName.includes('audio.extraction') || metricName.includes('extractAudio')) return 'audio_extraction';
+    if (metricName.includes('transcription') || metricName.includes('transcribe')) return 'transcription';
+    if (metricName.includes('content.processing') || metricName.includes('content-processing')) return 'content_processing';
+    
+    // General metrics
     if (metricName.includes('duration')) return 'response_time';
     if (metricName.includes('error')) return 'error_rate';
     if (metricName.includes('memory')) return 'memory_usage';
     if (metricName.includes('throughput')) return 'throughput';
-    return 'unknown';
+    
+    return 'response_time'; // Default to general response time for unknown duration metrics
   }
 
   private createAlert(type: 'warning' | 'critical', metric: PerformanceMetric, threshold: number): void {

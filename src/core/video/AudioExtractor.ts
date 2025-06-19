@@ -215,6 +215,21 @@ export class AudioExtractor {
   }
 
   /**
+   * Get fast audio extraction settings optimized for speed over quality
+   * Use for audio-first processing where transcription speed is critical
+   */
+  static getFastTranscriptionSettings(): AudioExtractionOptions {
+    return {
+      outputFormat: 'wav',
+      sampleRate: 16000, // Same as optimal for compatibility
+      channels: 1, // Mono for transcription
+      normalize: false, // Skip normalization for speed
+      removeNoise: false, // Skip noise reduction for speed
+      keepOriginalDuration: true
+    };
+  }
+
+  /**
    * Check if FFmpeg supports audio processing
    */
   async checkAudioProcessingSupport(): Promise<{
