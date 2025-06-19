@@ -10,6 +10,14 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 
+// Cleanup function to ensure proper process termination
+async function cleanup() {
+  // Give a moment for any pending operations to complete
+  setTimeout(() => {
+    process.exit(0);
+  }, 50);
+}
+
 // Configure logging early based on CLI arguments
 if (process.argv.includes('--quiet') || process.argv.includes('--version')) {
   logger.level = 'error'; // Suppress info logs for quiet mode and version check
@@ -161,6 +169,9 @@ program
     } catch (error) {
       console.error('❌ Video processing failed:', error instanceof Error ? error.message : error);
       process.exit(1);
+    } finally {
+      // Ensure process exits
+      await cleanup();
     }
   });
 
@@ -236,6 +247,9 @@ program
     } catch (error) {
       console.error('❌ Search failed:', error instanceof Error ? error.message : error);
       process.exit(1);
+    } finally {
+      // Ensure process exits
+      await cleanup();
     }
   });
 
@@ -336,6 +350,8 @@ program
     } catch (error) {
       console.error('❌ Segment extraction failed:', error instanceof Error ? error.message : error);
       process.exit(1);
+    } finally {
+      await cleanup();
     }
   });
 
