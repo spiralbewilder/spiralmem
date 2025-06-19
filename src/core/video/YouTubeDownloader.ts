@@ -305,7 +305,13 @@ export class YouTubeDownloader {
         '--external-downloader', 'ffmpeg',
         '--external-downloader-args', `ffmpeg_i:-ss ${startSec} -to ${endSec}`,
         '--no-playlist',
-        '--no-warnings'
+        '--no-warnings',
+        '--ignore-errors',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        '--referer', 'https://www.youtube.com/',
+        '--extractor-retries', '3',
+        '--fragment-retries', '3',
+        '--retry-sleep', '1'
       ];
 
       logger.debug(`yt-dlp segment command: ${args.join(' ')}`);
@@ -350,6 +356,10 @@ export class YouTubeDownloader {
       const process = spawn('yt-dlp', [
         '--dump-json',
         '--no-download',
+        '--no-warnings',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        '--referer', 'https://www.youtube.com/',
+        '--extractor-retries', '3',
         url
       ]);
 
@@ -442,6 +452,14 @@ export class YouTubeDownloader {
       const args = [
         '--format', this.getFormatSelector(options),
         '--output', outputTemplate,
+        '--no-warnings',
+        '--no-playlist',
+        '--ignore-errors',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        '--referer', 'https://www.youtube.com/',
+        '--extractor-retries', '3',
+        '--fragment-retries', '3',
+        '--retry-sleep', '1',
         url
       ];
 
