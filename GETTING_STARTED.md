@@ -35,18 +35,47 @@ spiralmem check
 
 You should see all green checkmarks ✅. If not, the command will tell you what's missing.
 
-### 2. Initialize the System
+### 2. Optional: Configure Environment
+> **🎯 Quick Note**: This step is **completely optional**! Spiralmem works perfectly without any configuration.
+
+If you want to customize settings or enable advanced features:
+
+```bash
+# Navigate to your installation directory
+cd ~/.spiralmem
+
+# Create your personal configuration from the template
+cp .env.example .env
+
+# Edit if you want to customize (optional)
+nano .env
+```
+
+**What's in the environment file?**
+- **YouTube API Key**: Only needed for advanced YouTube features (most users don't need this)
+- **Database paths**: Already set to sensible defaults
+- **Logging settings**: Pre-configured for optimal experience
+- **MCP server settings**: Already enabled for AI assistant integration
+
+**When do you need to configure this?**
+- ✅ **Never** - for basic video processing and YouTube downloads
+- ⚙️ **Maybe** - if you want custom database locations or specific logging levels
+- 🔑 **Rarely** - if you need advanced YouTube API features (channel management, quotas)
+
+> **💡 Pro Tip**: You can always configure this later! Start using Spiralmem immediately and configure only if you need specific customizations.
+
+### 3. Initialize the System
 ```bash
 spiralmem init
 ```
 
 This creates:
-- Database (`~/.local/share/spiralmem/data/spiralmem.db`)
-- Configuration (`~/.config/spiralmem/config.yaml`)
+- Database (`~/.spiralmem/data/spiralmem.db`)
+- Configuration files
 - Temp directories for processing
 - Default memory space
 
-### 3. Add Your First Video
+### 4. Add Your First Video
 
 ```bash
 # Add a video file

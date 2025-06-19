@@ -134,19 +134,77 @@ npm run cli -- check
 
 ## ⚡ Quick Start
 
+### After Installation
+
+**Step 1: Configure Environment (Optional)**
+```bash
+# Navigate to your installation directory
+cd ~/.spiralmem  # or wherever spiralmem was installed
+
+# Copy the environment template (this creates your personal configuration)
+cp .env.example .env
+
+# Edit configuration if needed (optional - system works without API keys)
+nano .env  # or your preferred editor
+```
+
+> **📝 Note**: Environment configuration is **optional**. Spiralmem works perfectly without any API keys for local video processing. You only need to configure environment variables if you want advanced YouTube features.
+
+**Step 2: Start Using Spiralmem**
 ```bash
 # 1. Initialize the system
-npm run cli -- init
+spiralmem init
 
-# 2. Add your first video
-npm run cli -- add-video /path/to/your/video.mp4
+# 2. Add your first video (supports local files and YouTube URLs!)
+spiralmem add-video /path/to/your/video.mp4
+spiralmem add-video https://youtu.be/your-video-url
 
 # 3. Search your content
-npm run cli -- search "your search terms"
+spiralmem search "your search terms"
 
-# 4. Start MCP server for AI integration
-npm run cli -- serve-mcp
+# 4. View system statistics
+spiralmem stats
 ```
+
+### Environment Configuration Details
+
+Spiralmem uses an optional environment file for advanced configuration. Here's what you need to know:
+
+**🔧 Required Steps:**
+- ✅ **None!** - The system works out-of-the-box without any configuration
+
+**⚙️ Optional Configuration:**
+If you'd like to customize settings or enable advanced features:
+
+1. **Create your personal configuration:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Available Configuration Options:**
+   ```bash
+   # YouTube API Key (optional - for advanced YouTube features only)
+   # The system uses yt-dlp for YouTube downloads, so this is rarely needed
+   YOUTUBE_API_KEY=your_api_key_here
+   
+   # Database location (optional - defaults work fine)
+   SPIRALMEM_DB_PATH=./data/spiralmem.db
+   
+   # Logging level (optional - 'info' is recommended)
+   SPIRALMEM_LOG_LEVEL=info
+   
+   # MCP Server (optional - enabled by default)
+   SPIRALMEM_MCP_ENABLED=true
+   ```
+
+**🔑 YouTube API Key Information:**
+- **When you need it**: Only for advanced YouTube features (quotas, channel management)
+- **When you don't**: For basic YouTube video processing (most users)
+- **How to get one**: Visit [Google Cloud Console](https://console.developers.google.com/apis/credentials) and create a YouTube Data API v3 key
+- **Privacy note**: Your API key stays local and is never transmitted anywhere
+
+**🛡️ Security Notice:**
+Your `.env` file is automatically excluded from version control and stays private on your system. Never share your API keys with others.
 
 ---
 
